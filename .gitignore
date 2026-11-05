@@ -1,0 +1,11 @@
+.env
+**/.env
+**/node_modules/
+**/dist/
+**/target/
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/*.tsbuildinfo
+.idea/
+.vscode/

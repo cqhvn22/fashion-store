@@ -1,0 +1,8 @@
+name: docker-build
+on: [push, pull_request]
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose -f infrastructure/docker/compose.yaml build

@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: auth
+              uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/auth/**,/api/v1/users/**
+            - id: catalog
+              uri: ${CATALOG_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/api/v1/products/**,/api/v1/categories/**,/api/v1/admin/products/**
+            - id: order
+              uri: ${ORDER_SERVICE_URL:http://localhost:8083}
+              predicates:
+                - Path=/api/v1/cart/**,/api/v1/orders/**,/api/v1/admin/orders/**
+            - id: ai
+              uri: ${AI_SERVICE_URL:http://localhost:8000}
+              predicates:
+                - Path=/api/v1/chat/**,/api/v1/admin/knowledge/**
+server:
+  port: ${PORT:8080}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
