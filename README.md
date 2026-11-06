@@ -19,6 +19,8 @@ Backend hiện là khung Spring Boot; các API nghiệp vụ chưa được tri�
 
 Frontend đang bật mock. Backend hiện có health check và gateway routes, chưa có API nghiệp vụ, database, xác thực hoặc messaging. Xem `frontend/API_CONTRACT.md` trước khi chuyển sang API thật.
 
+Biểu đồ use case tổng quát và phạm vi từng actor: [docs/uml/use-case-overview.md](docs/uml/use-case-overview.md).
+
 | Service | Port |
 | --- | ---: |
 | API gateway | 8080 |
