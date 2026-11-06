@@ -1,95 +1,45 @@
 @startuml
-title FashionHub - Biểu đồ use case tổng quát
+title FashionHub - Biểu đồ use case tổng quan
 left to right direction
-skinparam packageStyle rectangle
 skinparam shadowing false
 
-actor "Khách truy cập" as Visitor
+actor "Khách truy cập" as Guest
 actor "Khách hàng" as Customer
 actor "Quản trị viên" as Admin
-Customer --|> Visitor
+Customer --|> Guest
 Admin --|> Customer
 
 rectangle "Hệ thống FashionHub" {
-  package "Khám phá và mua sắm" {
-    usecase "Xem trang chủ" as UC_Home
-    usecase "Xem danh mục và sản phẩm" as UC_Browse
-    usecase "Tìm kiếm, lọc, sắp xếp" as UC_Search
-    usecase "Xem chi tiết, chọn biến thể" as UC_Detail
-    usecase "Quản lý giỏ hàng" as UC_Cart
-    usecase "Quản lý yêu thích" as UC_Wishlist
-    usecase "Xem thông tin và chính sách" as UC_Content
-  }
-  package "Tài khoản và đơn hàng" {
-    usecase "Đăng ký" as UC_Register
-    usecase "Đăng nhập" as UC_Login
-    usecase "Yêu cầu quên mật khẩu" as UC_Forgot
-    usecase "Đăng xuất" as UC_Logout
-    usecase "Cập nhật hồ sơ" as UC_Profile
-    usecase "Quản lý sổ địa chỉ" as UC_Address
-    usecase "Đặt hàng COD" as UC_Checkout
-    usecase "Kiểm tra giỏ hàng và tồn kho" as UC_Validate
-    usecase "Xem lịch sử, chi tiết đơn" as UC_MyOrders
-    usecase "Hủy đơn đủ điều kiện" as UC_Cancel
-  }
-  package "Trợ lý mua sắm" {
-    usecase "Hỏi đáp sản phẩm, size, chính sách" as UC_Chat
-    usecase "Xem nguồn và gợi ý sản phẩm" as UC_Sources
-  }
-  package "Quản trị" {
-    usecase "Xem tổng quan" as UC_Dashboard
-    usecase "Quản lý sản phẩm và biến thể" as UC_Products
-    usecase "Quản lý danh mục" as UC_Categories
-    usecase "Điều chỉnh tồn kho SKU" as UC_Inventory
-    usecase "Xem, lọc và xử lý đơn hàng" as UC_AdminOrders
-    usecase "Cập nhật trạng thái đơn" as UC_Status
-    usecase "Quản lý kho tri thức" as UC_Knowledge
-    usecase "Xem hội thoại AI" as UC_Conversations
-    usecase "Xem báo cáo, doanh thu" as UC_Reports
-    usecase "Xem danh sách người dùng" as UC_Users
-  }
+  usecase "Khám phá sản phẩm" as Browse
+  usecase "Tìm kiếm và lọc sản phẩm" as Search
+  usecase "Quản lý giỏ hàng" as Cart
+  usecase "Lưu sản phẩm yêu thích" as Wishlist
+  usecase "Xem thông tin và chính sách" as Info
+  usecase "Đăng ký / đăng nhập" as Auth
+  usecase "Nhận tư vấn mua sắm" as Chat
+  usecase "Quản lý tài khoản" as Account
+  usecase "Đặt hàng COD" as Checkout
+  usecase "Theo dõi và hủy đơn" as MyOrders
+  usecase "Quản lý sản phẩm và danh mục" as ManageCatalog
+  usecase "Quản lý tồn kho" as ManageStock
+  usecase "Quản lý đơn hàng" as ManageOrders
+  usecase "Quản lý tri thức AI" as ManageKnowledge
+  usecase "Xem báo cáo và người dùng" as Reports
 }
 
-Visitor --> UC_Home
-Visitor --> UC_Browse
-Visitor --> UC_Search
-Visitor --> UC_Detail
-Visitor --> UC_Cart
-Visitor --> UC_Wishlist
-Visitor --> UC_Content
-Visitor --> UC_Register
-Visitor --> UC_Login
-Visitor --> UC_Forgot
-Visitor --> UC_Chat
-UC_Sources ..> UC_Chat : <<extend>>
-
-Customer --> UC_Logout
-Customer --> UC_Profile
-Customer --> UC_Address
-Customer --> UC_Checkout
-Customer --> UC_MyOrders
-Customer --> UC_Cancel
-UC_Checkout ..> UC_Validate : <<include>>
-UC_Cancel ..> UC_MyOrders : <<extend>>
-
-Admin --> UC_Dashboard
-Admin --> UC_Products
-Admin --> UC_Categories
-Admin --> UC_Inventory
-Admin --> UC_AdminOrders
-Admin --> UC_Status
-Admin --> UC_Knowledge
-Admin --> UC_Conversations
-Admin --> UC_Reports
-Admin --> UC_Users
-UC_Status ..> UC_AdminOrders : <<extend>>
-
-note bottom of UC_Forgot
-  Chỉ ghi nhận yêu cầu trong demo;
-  chưa gửi email khôi phục.
-end note
-note bottom of UC_Chat
-  Trả lời theo quy tắc và dữ liệu mẫu;
-  AI/RAG thực chưa tích hợp.
-end note
+Guest --> Browse
+Guest --> Search
+Guest --> Cart
+Guest --> Wishlist
+Guest --> Info
+Guest --> Auth
+Guest --> Chat
+Customer --> Account
+Customer --> Checkout
+Customer --> MyOrders
+Admin --> ManageCatalog
+Admin --> ManageStock
+Admin --> ManageOrders
+Admin --> ManageKnowledge
+Admin --> Reports
 @enduml
