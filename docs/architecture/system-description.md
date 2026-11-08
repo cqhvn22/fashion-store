@@ -4,29 +4,29 @@
 
 ## 1. Mục tiêu và phạm vi
 
-FashionHub là website bán thời trang cho khách truy cập, khách hàng và quản trị viên. Khách hàng tìm sản phẩm theo danh mục, bộ lọc và tìm kiếm; chọn biến thể màu/size, đặt hàng COD, theo dõi đơn và nhận tư vấn từ chatbot. Quản trị viên quản lý danh mục, sản phẩm, tồn kho, đơn hàng, kho tri thức và báo cáo.
+FashionHub là website bán thời trang cho khách truy cập, khách hàng và quản trị viên. Khách hàng tìm sản phẩm theo danh mục, bộ lọc và tìm kiếm; chọn biến thể màu/size, đặt hàng COD hoặc thanh toán trực tuyến qua PayOS, theo dõi đơn và nhận tư vấn từ chatbot. Quản trị viên quản lý danh mục, sản phẩm, tồn kho, đơn hàng, kho tri thức và báo cáo.
 
-Phạm vi bản MVP được rút từ các route tại frontend/src/app/App.tsx, các model tại frontend/src/types/models.ts và yêu cầu tại frontend/implement.md. Cổng thanh toán trực tuyến, đánh giá sản phẩm, khuyến mãi và gửi email khôi phục mật khẩu chưa nằm trong luồng đã xây dựng.
+Phạm vi bản MVP được rút từ các route tại frontend/src/app/App.tsx, các model tại frontend/src/types/models.ts và yêu cầu tại frontend/implement.md, đồng thời bổ sung PayOS theo yêu cầu mới. Thanh toán PayOS là **phần cần triển khai**, chưa có trên giao diện và backend hiện tại. Đánh giá sản phẩm, khuyến mãi và gửi email khôi phục mật khẩu chưa nằm trong luồng đã xây dựng.
 
 ### 1.1. Vai trò và chức năng
 
 | Vai trò | Chức năng |
 | --- | --- |
 | Khách truy cập | Xem trang chủ, danh mục, sản phẩm và chính sách; tìm kiếm/lọc/sắp xếp; xem chi tiết và biến thể; dùng giỏ hàng, danh sách yêu thích và chatbot; đăng ký/đăng nhập. |
-| Khách hàng | Tất cả quyền trên; cập nhật hồ sơ, sổ địa chỉ; đặt hàng COD; xem lịch sử/chi tiết đơn; hủy đơn ở trạng thái PENDING hoặc CONFIRMED; đăng xuất. |
+| Khách hàng | Tất cả quyền trên; cập nhật hồ sơ, sổ địa chỉ; chọn COD hoặc PayOS khi đặt hàng; xem trạng thái thanh toán và lịch sử/chi tiết đơn; hủy đơn đủ điều kiện; đăng xuất. |
 | Quản trị viên | Tất cả quyền trên; xem dashboard; tạo/sửa/xóa sản phẩm, biến thể và danh mục; điều chỉnh tồn kho; xem và cập nhật trạng thái đơn; quản lý tài liệu tri thức; xem hội thoại, báo cáo và danh sách người dùng. |
 
 ### 1.2. Trạng thái triển khai hiện tại
 
 | Thành phần | Đã có | Cần triển khai |
 | --- | --- | --- |
-| Frontend | Giao diện và các luồng chính bằng mock data; giỏ hàng, yêu thích và một số dữ liệu lưu ở trình duyệt. | Kết nối và kiểm thử với API thật; thay các adapter còn dùng mock. |
+| Frontend | Giao diện và luồng COD bằng mock data; giỏ hàng, yêu thích và một số dữ liệu lưu ở trình duyệt. | Thêm lựa chọn PayOS, trang chờ/kết quả thanh toán; kết nối và kiểm thử với API thật. |
 | API Gateway | Ứng dụng Quarkus chuyển tiếp các đường dẫn /api/v1 và có health check. | Xác thực/ủy quyền ở lớp phù hợp, quan sát và xử lý lỗi đầy đủ. |
-| Auth, Catalog, Order, Notification | Khung Quarkus, cấu hình và health check. | Resource, nghiệp vụ, migration, truy cập CSDL, bảo mật và kiểm thử. |
+| Auth, Catalog, Order, Notification | Khung Quarkus, cấu hình và health check. | Resource, nghiệp vụ, migration, truy cập CSDL, bảo mật và kiểm thử; Order tích hợp PayOS. |
 | AI service | FastAPI với health check. | Chat, quản trị tri thức, ingestion, embeddings và retrieval thực. |
 | Kafka, PostgreSQL, MongoDB | Có cấu hình Compose phát triển. | Topic, database riêng, migration và tích hợp service. |
 
-Chức năng quên mật khẩu hiện chỉ xác nhận yêu cầu trong giao diện demo; đổi mật khẩu chưa tích hợp. Chatbot hiện trả lời theo quy tắc và tài liệu mẫu, chưa phải AI/RAG thực. Notification service chưa gửi email/SMS.
+Chức năng quên mật khẩu hiện chỉ xác nhận yêu cầu trong giao diện demo; đổi mật khẩu chưa tích hợp. Chatbot hiện trả lời theo quy tắc và tài liệu mẫu, chưa phải AI/RAG thực. Notification service chưa gửi email/SMS. **Chưa có giao dịch PayOS thực trong repository.**
 
 ## 2. Kiến trúc tổng quan
 
@@ -39,6 +39,7 @@ API Gateway (8080)
   |-- Auth service (8081)         -> fashion_auth
   |-- Catalog service (8082)      -> fashion_catalog
   |-- Order service (8083)        -> fashion_order
+  |                                  <-> PayOS API/webhook (dịch vụ bên ngoài)
   |-- AI service (8000)           -> fashion_ai
   |
   +-- Notification service (8084) <- Kafka events -> fashion_notification
@@ -55,21 +56,23 @@ MongoDB có trong Compose nhưng chưa được sử dụng trong phương án S
 | API Gateway | Điểm vào, route, kiểm tra token/quyền ở mức cổng; **không có CSDL riêng**. | Chuyển tiếp /api/v1/... |
 | Auth | Tài khoản, mật khẩu đã băm, vai trò USER/ADMIN, phiên/refresh token, sổ địa chỉ. | /auth/register, /auth/login, /auth/logout, /auth/refresh, /users/me, /users/me/addresses |
 | Catalog | Danh mục, sản phẩm, ảnh, biến thể, giá, tồn kho, yêu thích, đặt giữ tồn. | /products, /products/slug/{slug}, /categories, /admin/products, /admin/categories, /admin/inventory |
-| Order | Giỏ hàng của tài khoản, đơn COD, dòng hàng snapshot, lịch sử trạng thái, outbox sự kiện. | /cart, /orders, /orders/my, /orders/{id}, /orders/{id}/cancel, /admin/orders |
+| Order | Giỏ hàng của tài khoản, đơn COD/PayOS, trạng thái thanh toán, payment attempt, webhook, dòng hàng snapshot, lịch sử trạng thái và outbox sự kiện. Không tạo service thanh toán riêng trong MVP. | /cart, /orders, /orders/my, /orders/{id}, /orders/{id}/cancel, /payments/payos/webhook, /admin/orders |
 | Notification | Mẫu thông báo, hàng đợi gửi, lịch sử thử gửi, chống xử lý trùng sự kiện. | Chủ yếu nhận Kafka; API nội bộ/health nếu cần. |
 | AI | Tài liệu tri thức, đoạn tài liệu, embeddings, hội thoại, nguồn trích dẫn và gợi ý sản phẩm. | /chat, /chat/conversations, /admin/knowledge |
 
-Các endpoint ở trên là **đề xuất**, cần thống nhất với frontend/API_CONTRACT.md. Gateway hiện chưa route đầy đủ các đường dẫn admin categories, inventory, statistics, users, địa chỉ và chat history.
+Các endpoint ở trên là **đề xuất**, cần thống nhất với frontend/API_CONTRACT.md. Khi triển khai PayOS, Gateway cần chuyển tiếp đường dẫn webhook công khai đến Order mà không yêu cầu token người dùng; Order tự xác minh chữ ký PayOS. Các route khác cũng cần đối chiếu với danh sách API thực tế.
 
 ### 2.2. Luồng chính và quy tắc nghiệp vụ
 
 1. **Duyệt sản phẩm:** Catalog trả về sản phẩm ACTIVE, danh mục đang hiển thị, biến thể còn hàng; hỗ trợ q, category, minPrice, maxPrice, size, color, sort và phân trang. Trang admin có thể xem cả DRAFT/INACTIVE.
-2. **Đặt hàng:** Order lấy user_id từ token, nhận variantId và quantity của các món được chọn, gọi Catalog để xác nhận biến thể/giá và giữ tồn, tính lại tiền trên server, tạo đơn PENDING với địa chỉ snapshot và payment_method = COD. Không tin unitPrice hoặc totalAmount gửi từ browser.
-3. **Tồn kho liên service:** Catalog giữ tồn bằng reservation có thời hạn. Order xác nhận hoặc giải phóng reservation theo kết quả tạo đơn; thao tác phải có idempotency key để tránh đặt hai đơn do gửi lại request. Thiết kế production cần saga/compensation cho lỗi giữa hai service; không có transaction SQL xuyên service.
-4. **Trạng thái đơn:** PENDING → CONFIRMED hoặc CANCELLED; CONFIRMED → PROCESSING hoặc CANCELLED; PROCESSING → SHIPPING; SHIPPING → DELIVERED. Customer chỉ hủy đơn của mình khi PENDING/CONFIRMED. Hủy đơn đã trừ kho cần hoàn tồn đúng một lần.
-5. **Sự kiện:** Order ghi outbox trong cùng transaction với đơn/trạng thái; publisher đưa order.created, order.status_changed, order.cancelled lên Kafka. Notification tiêu thụ idempotent và tạo yêu cầu gửi; thất bại gửi không làm mất đơn.
-6. **Chatbot:** AI nhận câu hỏi và conversationId, truy xuất đoạn tri thức, trả lời kèm nguồn và productIds gợi ý. Catalog là nguồn sự thật cho tên/giá/tồn sản phẩm; AI chỉ lưu ID gợi ý và tài liệu tri thức của mình.
-7. **Báo cáo:** Dashboard/doanh thu tính từ đơn đã DELIVERED trong Order; số lượng sản phẩm/tồn từ Catalog. Ở MVP có thể tổng hợp qua API nội bộ; sau này dùng read model riêng khi tải lớn.
+2. **Đặt hàng:** Order lấy user_id từ token, nhận variantId và quantity của các món được chọn, gọi Catalog để xác nhận biến thể/giá và giữ tồn, tính lại tiền trên server, tạo đơn PENDING với địa chỉ snapshot và payment_method = COD hoặc PAYOS. Không tin unitPrice hoặc totalAmount gửi từ browser.
+3. **Thanh toán COD:** Đơn bắt đầu với payment_status = UNPAID. Cửa hàng thu tiền khi giao hàng; việc xác nhận đã thu tiền là thao tác nghiệp vụ riêng, không được suy ra chỉ từ việc tạo đơn.
+4. **Thanh toán PayOS:** Order tạo payment attempt và mã orderCode dạng số duy nhất cho PayOS, gọi API tạo link bằng số tiền đã tính trên server, lưu paymentLinkId/checkoutUrl và trả checkoutUrl cho frontend chuyển hướng. Đơn và payment_status ở PENDING cho đến khi có kết quả xác thực. Order nhận webhook, kiểm tra signature, orderCode, paymentLinkId và amount; xử lý idempotent rồi chuyển payment_status sang PAID và đơn sang CONFIRMED khi hợp lệ. returnUrl/cancelUrl chỉ phục vụ hiển thị và tải lại trạng thái từ backend, **không phải bằng chứng thanh toán**. [API PayOS](https://payos.vn/docs/api/), [webhook](https://payos.vn/docs/du-lieu-tra-ve/webhook/).
+5. **Tồn kho liên service:** Catalog giữ tồn bằng reservation có thời hạn, bao gồm thời gian khách thanh toán PayOS. Khi thanh toán thành công, Order xác nhận reservation; khi link hết hạn/hủy hoặc thanh toán thất bại, Order hủy đơn và giải phóng reservation. Các thao tác phải có idempotency key; thiết kế production cần saga/compensation cho lỗi giữa các service, không có transaction SQL xuyên service.
+6. **Trạng thái đơn và thanh toán:** Trạng thái đơn và payment_status là hai trường độc lập. Luồng đơn: PENDING → CONFIRMED hoặc CANCELLED; CONFIRMED → PROCESSING hoặc CANCELLED; PROCESSING → SHIPPING; SHIPPING → DELIVERED. Khách chỉ tự hủy đơn COD hoặc PayOS **chưa thanh toán** ở trạng thái PENDING/CONFIRMED. Đơn PayOS đã PAID không tự hủy trong MVP vì chưa có quy trình hoàn tiền; cần xử lý thủ công hoặc bổ sung hoàn tiền trước khi mở quyền này. Hoàn tồn phải thực hiện đúng một lần.
+7. **Sự kiện:** Order ghi outbox trong cùng transaction với thay đổi đơn/thanh toán; publisher đưa order.created, order.status_changed, order.cancelled và payment.paid lên Kafka. Notification tiêu thụ idempotent và tạo yêu cầu gửi; thất bại gửi không làm mất đơn.
+8. **Chatbot:** AI nhận câu hỏi và conversationId, truy xuất đoạn tri thức, trả lời kèm nguồn và productIds gợi ý. Catalog là nguồn sự thật cho tên/giá/tồn sản phẩm; AI chỉ lưu ID gợi ý và tài liệu tri thức của mình.
+9. **Báo cáo:** Dashboard/doanh thu tính từ đơn đã DELIVERED trong Order; số lượng sản phẩm/tồn từ Catalog. Báo cáo phải tách doanh thu giao hàng và số tiền đã thu, tránh gộp đơn COD chưa thu với giao dịch PayOS đã PAID. Ở MVP có thể tổng hợp qua API nội bộ; sau này dùng read model riêng khi tải lớn.
 
 Quy tắc phí vận chuyển hiện có trong mock: đơn từ **500.000 VND** được miễn phí, dưới mức đó **30.000 VND**. Đây là cấu hình nghiệp vụ đề xuất để backend đồng nhất với giao diện, không phải phí cố định vĩnh viễn.
 
@@ -260,7 +263,7 @@ Giá minPrice/maxPrice trong response được tính từ các biến thể đan
 
 ### 3.3. Order service — database fashion_order
 
-Giỏ hàng server là phần **đề xuất cho API mode**; khách chưa đăng nhập tiếp tục dùng giỏ local trên frontend. Order lưu snapshot của địa chỉ và sản phẩm. outbox_events dùng để publish Kafka an toàn sau khi transaction tạo đơn hoàn tất.
+Giỏ hàng server là phần **đề xuất cho API mode**; khách chưa đăng nhập tiếp tục dùng giỏ local trên frontend. Order lưu snapshot của địa chỉ và sản phẩm. Order cũng sở hữu trạng thái thanh toán, từng lần tạo link PayOS và lịch sử webhook; không cần database hay service thanh toán riêng. `outbox_events` dùng để publish Kafka an toàn sau khi transaction thay đổi đơn hoàn tất. Mã `orders.order_code` hiển thị cho khách là chuỗi, còn `payment_attempts.provider_order_code` là số nguyên duy nhất theo hợp đồng PayOS.
 
 ~~~sql
 CREATE TABLE carts (
@@ -294,7 +297,11 @@ CREATE TABLE orders (
             'SHIPPING', 'DELIVERED', 'CANCELLED'
         )),
     payment_method VARCHAR(20) NOT NULL DEFAULT 'COD'
-        CHECK (payment_method = 'COD'),
+        CHECK (payment_method IN ('COD', 'PAYOS')),
+    payment_status VARCHAR(12) NOT NULL
+        CHECK (payment_status IN (
+            'UNPAID', 'PENDING', 'PAID', 'FAILED', 'CANCELLED', 'EXPIRED'
+        )),
     shipping_address JSONB NOT NULL
         CHECK (jsonb_typeof(shipping_address) = 'object'),
     subtotal BIGINT NOT NULL CHECK (subtotal >= 0),
@@ -305,10 +312,15 @@ CREATE TABLE orders (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (user_id, idempotency_key),
-    CHECK (total_amount = subtotal + shipping_fee - discount_amount)
+    CHECK (total_amount = subtotal + shipping_fee - discount_amount),
+    CHECK (
+        (payment_method = 'COD' AND payment_status IN ('UNPAID', 'PAID', 'CANCELLED'))
+        OR (payment_method = 'PAYOS' AND payment_status <> 'UNPAID')
+    )
 );
 CREATE INDEX ix_orders_user_time ON orders (user_id, created_at DESC);
 CREATE INDEX ix_orders_status_time ON orders (status, created_at DESC);
+CREATE INDEX ix_orders_payment_status_time ON orders (payment_status, created_at DESC);
 
 CREATE TABLE order_items (
     id UUID PRIMARY KEY,
@@ -326,6 +338,53 @@ CREATE TABLE order_items (
     CHECK (line_total = unit_price * quantity)
 );
 CREATE INDEX ix_order_items_order ON order_items (order_id);
+
+CREATE TABLE payment_attempts (
+    id UUID PRIMARY KEY,
+    order_id UUID NOT NULL REFERENCES orders(id),
+    provider VARCHAR(12) NOT NULL DEFAULT 'PAYOS' CHECK (provider = 'PAYOS'),
+    provider_order_code BIGINT NOT NULL UNIQUE CHECK (provider_order_code > 0),
+    payment_link_id VARCHAR(120) UNIQUE,
+    checkout_url TEXT,
+    amount BIGINT NOT NULL CHECK (amount > 0),
+    status VARCHAR(12) NOT NULL DEFAULT 'PENDING'
+        CHECK (status IN ('PENDING', 'PAID', 'FAILED', 'CANCELLED', 'EXPIRED')),
+    expires_at TIMESTAMPTZ NOT NULL,
+    paid_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (status <> 'PAID' OR paid_at IS NOT NULL)
+);
+CREATE INDEX ix_payment_attempts_order_time
+    ON payment_attempts (order_id, created_at DESC);
+CREATE UNIQUE INDEX ux_payment_attempts_active_order
+    ON payment_attempts (order_id) WHERE status = 'PENDING';
+
+CREATE TABLE payment_webhook_events (
+    id UUID PRIMARY KEY,
+    payment_attempt_id UUID NOT NULL REFERENCES payment_attempts(id),
+    payload_sha256 CHAR(64) NOT NULL UNIQUE,
+    provider_reference VARCHAR(120),
+    payload JSONB NOT NULL CHECK (jsonb_typeof(payload) = 'object'),
+    received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    processed_at TIMESTAMPTZ,
+    processing_error TEXT
+);
+CREATE INDEX ix_payment_webhook_events_attempt_time
+    ON payment_webhook_events (payment_attempt_id, received_at DESC);
+
+CREATE TABLE payment_status_history (
+    id UUID PRIMARY KEY,
+    order_id UUID NOT NULL REFERENCES orders(id),
+    payment_attempt_id UUID REFERENCES payment_attempts(id),
+    previous_status VARCHAR(12),
+    status VARCHAR(12) NOT NULL
+        CHECK (status IN ('UNPAID', 'PENDING', 'PAID', 'FAILED', 'CANCELLED', 'EXPIRED')),
+    reason VARCHAR(120),
+    changed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX ix_payment_status_history_order_time
+    ON payment_status_history (order_id, changed_at DESC);
 
 CREATE TABLE order_status_history (
     id UUID PRIMARY KEY,
@@ -356,16 +415,23 @@ CREATE INDEX ix_outbox_events_pending
     ON outbox_events (created_at) WHERE published_at IS NULL;
 ~~~
 
-Ví dụ truy vấn báo cáo doanh thu và số đơn đã giao, dùng trong dashboard của Order service:
+Ví dụ truy vấn báo cáo giá trị đơn đã giao và phần đã thu trong số đó, dùng trong dashboard của Order service. Với COD, cần ghi nhận thu tiền bằng nghiệp vụ riêng sau giao hàng. Tổng tiền đã thu toàn hệ thống phải tính cả đơn PayOS đã trả tiền nhưng chưa giao:
 
 ~~~sql
 SELECT date_trunc('day', created_at) AS order_day,
        COUNT(*) AS delivered_orders,
-       SUM(total_amount) AS revenue_vnd
+       SUM(total_amount) AS delivered_value_vnd,
+       COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'PAID'), 0)
+           AS collected_delivered_vnd
 FROM orders
 WHERE status = 'DELIVERED'
 GROUP BY date_trunc('day', created_at)
 ORDER BY order_day DESC;
+
+SELECT COUNT(*) AS paid_orders,
+       COALESCE(SUM(total_amount), 0) AS collected_vnd
+FROM orders
+WHERE payment_status = 'PAID';
 ~~~
 
 ### 3.4. Notification service — database fashion_notification
@@ -517,13 +583,15 @@ Prefix bên ngoài Gateway là /api/v1. Response đề xuất theo frontend/API_
 | Catalog | CRUD /admin/products, /admin/categories; GET/PATCH /admin/inventory | ADMIN | Giao diện admin có; API inventory/categories chưa tích hợp. |
 | Catalog | GET/POST/DELETE /wishlist | USER/ADMIN | Đề xuất cho API mode; hiện lưu local, khách chưa đăng nhập cũng có thể dùng local. |
 | Order | GET/POST/PATCH/DELETE /cart/items | USER/ADMIN | Đề xuất cho API mode; hiện lưu local. |
-| Order | POST /orders, GET /orders/my, GET /orders/{id}, PATCH /orders/{id}/cancel | USER/ADMIN, chỉ đơn của mình | UI có; backend chưa có. Endpoint hủy riêng là đề xuất an toàn hơn việc khách gọi route cập nhật trạng thái admin. |
+| Order | POST /orders, GET /orders/my, GET /orders/{id}, PATCH /orders/{id}/cancel | USER/ADMIN, chỉ đơn của mình | UI COD có; backend chưa có. POST nhận `paymentMethod: COD/PAYOS`; khi chọn PayOS trả `checkoutUrl` và trạng thái để frontend chuyển hướng. Khách không tự hủy đơn PayOS đã PAID trong MVP. |
+| Order | GET /orders/{id}/payment | USER/ADMIN, chỉ đơn của mình | Đề xuất để trang trở về từ PayOS tải trạng thái thật từ backend; chưa có UI/backend. |
+| Order | POST /payments/payos/webhook | Public tại Gateway; xác thực chữ ký PayOS tại Order | Đề xuất; không yêu cầu JWT người dùng. Xác minh chữ ký và đối chiếu mã, link, số tiền trước khi cập nhật idempotent; chưa có backend. |
 | Order | GET /admin/orders, PATCH /admin/orders/{id}/status, GET /admin/statistics | ADMIN | UI có; backend chưa có. |
 | AI | POST /chat, GET /chat/conversations[/{id}] | Public/USER tùy chính sách lưu hội thoại | Chat mock có; lưu hội thoại server chưa có. |
 | AI | GET/POST/PUT/DELETE /admin/knowledge[/{id}], GET /admin/ai-conversations | ADMIN | Giao diện có; backend chưa có. |
 | Notification | Không mở endpoint public trong MVP | Nội bộ | Chưa tích hợp. |
 
-**Lưu ý hợp đồng:** frontend hiện gọi PATCH /admin/orders/{id}/status cả khi khách tự hủy trong API mode. Khi triển khai backend, phải sửa frontend sang PATCH /orders/{id}/cancel và kiểm tra user_id ở server. Các route Gateway hiện cũng chưa bao phủ toàn bộ endpoint ở bảng trên. Endpoint quản trị người dùng chỉ cần GET /admin/users cho giao diện hiện tại; khóa tài khoản/phân quyền là chức năng mở rộng, chưa có UI.
+**Lưu ý hợp đồng:** frontend hiện gọi PATCH /admin/orders/{id}/status cả khi khách tự hủy trong API mode. Khi triển khai backend, phải sửa frontend sang PATCH /orders/{id}/cancel và kiểm tra user_id ở server. Model frontend hiện còn `MOCK_PAYMENT`; cần thay bằng `PAYOS` và hiển thị kết quả qua API. Gateway phải bổ sung route `/api/v1/payments/payos/webhook` và `/api/v1/orders/{id}/payment`; các route khác cũng chưa bao phủ toàn bộ bảng trên. Endpoint quản trị người dùng chỉ cần GET /admin/users cho giao diện hiện tại; khóa tài khoản/phân quyền là chức năng mở rộng, chưa có UI.
 
 ## 5. Kafka và tính nhất quán
 
@@ -532,9 +600,11 @@ Prefix bên ngoài Gateway là /api/v1. Response đề xuất theo frontend/API_
 | fashion.order.created.v1 | Order | Notification, báo cáo/read model sau này | eventId, orderId, userId, orderCode, totalAmount, createdAt |
 | fashion.order.status-changed.v1 | Order | Notification, Catalog khi cần | eventId, orderId, userId, previousStatus, status, changedAt |
 | fashion.order.cancelled.v1 | Order | Catalog, Notification | eventId, orderId, userId, checkoutId, cancelledAt |
+| fashion.payment.paid.v1 | Order | Notification, báo cáo/read model sau này | eventId, orderId, userId, paymentAttemptId, amount, paidAt |
 
 - eventId là UUID ổn định để consumer chống xử lý trùng. Version ở tên topic và payload giúp nâng cấp hợp đồng.
 - Order ghi outbox và thay đổi đơn trong cùng transaction. Worker publish outbox lên Kafka và đánh dấu published_at; consumer phải chấp nhận sự kiện đến lại hoặc không đúng thứ tự.
+- PayOS webhook có thể được gửi lại; Order lưu dấu webhook, khóa giao dịch khi xử lý và chỉ phát `fashion.payment.paid.v1` một lần cho một lần thanh toán đã xác nhận. Không đưa khóa API, signature hoặc payload ngân hàng thô vào Kafka.
 - Catalog sử dụng checkout_id/reservation_id và inventory_movements để tránh trừ/hoàn tồn hai lần. Notification dùng processed_events và ghi hàng đợi thông báo trong cùng transaction xử lý sự kiện.
 - Không đặt dữ liệu cá nhân nhạy cảm hoặc password/token trong event. Notification lấy địa chỉ email/phone qua Auth service hoặc dữ liệu cho phép được truyền có kiểm soát; chính sách này cần chốt trước khi triển khai.
 
@@ -546,16 +616,19 @@ Prefix bên ngoài Gateway là /api/v1. Response đề xuất theo frontend/API_
 4. Chỉ Catalog được cập nhật tồn kho. Order không ghi trực tiếp vào database Catalog. Cập nhật trạng thái cần kiểm tra transition và chống ghi đè đồng thời.
 5. Dùng migration có version, backup riêng theo database và index cho truy vấn trang danh sách. Dùng tracing/correlation ID qua Gateway, service và Kafka.
 6. Hạn chế truy cập CSDL theo service; kết nối TLS và phân quyền trong môi trường triển khai. Không dùng tài khoản PostgreSQL quản trị cho ứng dụng.
+7. Khóa PayOS (`clientId`, `apiKey`, `checksumKey`) lấy từ biến môi trường/secret manager. Webhook phải được xác minh chữ ký theo SDK/hợp đồng PayOS rồi đối chiếu `orderCode`, `paymentLinkId` và số tiền với bản ghi nội bộ. Không coi `returnUrl`, `cancelUrl` hay dữ liệu frontend là xác nhận thanh toán. Lưu webhook để truy vết, che dữ liệu nhạy cảm và xử lý lặp an toàn.
+8. Đặt thời hạn link và reservation đồng bộ; tác vụ định kỳ kiểm tra các giao dịch chờ quá hạn với PayOS trước khi hủy/hoàn tồn. Theo dõi webhook lỗi, thanh toán đã nhận nhưng đơn chưa xác nhận và đối soát thủ công khi có sai lệch.
 
 ## 7. Thứ tự triển khai đề xuất
 
 1. Chốt hợp đồng API và ownership trong tài liệu này; thêm route Gateway còn thiếu.
 2. Tạo 5 database, tách migration và cấu hình datasource của từng service. DDL ở mục 3 là bản thiết kế khởi đầu, chưa được áp dụng tự động.
 3. Hoàn thiện Auth, Catalog và Order với kiểm thử phân quyền, tính tiền, đặt giữ tồn và idempotency.
-4. Nối frontend sang API mode từng nhóm màn hình, thay localStorage cho giỏ hàng/yêu thích/địa chỉ nếu muốn đồng bộ đa thiết bị.
-5. Thêm outbox/Kafka và Notification; xác nhận provider gửi, retry và quan sát lỗi.
-6. Hoàn thiện AI ingestion/retrieval, quản trị tri thức và truy xuất nguồn; chỉ gọi là RAG thực sau khi có embeddings và kiểm thử chất lượng câu trả lời.
-7. Bổ sung CI migration, kiểm thử tích hợp giữa service và dữ liệu seed cho môi trường demo.
+4. Tích hợp PayOS trong Order: cấu hình bí mật, tạo link, webhook xác thực/idempotent, hết hạn/đối soát và kiểm thử luồng thành công, thất bại, hủy, webhook lặp và webhook đến trễ.
+5. Nối frontend sang API mode từng nhóm màn hình; bổ sung lựa chọn PayOS và trang kết quả tải trạng thái từ Order, thay localStorage cho giỏ hàng/yêu thích/địa chỉ nếu muốn đồng bộ đa thiết bị.
+6. Thêm outbox/Kafka và Notification; xác nhận provider gửi, retry và quan sát lỗi.
+7. Hoàn thiện AI ingestion/retrieval, quản trị tri thức và truy xuất nguồn; chỉ gọi là RAG thực sau khi có embeddings và kiểm thử chất lượng câu trả lời.
+8. Bổ sung CI migration, kiểm thử tích hợp giữa service và dữ liệu seed cho môi trường demo.
 
 ## 8. Nguồn đối chiếu trong repository
 
@@ -565,5 +638,8 @@ Prefix bên ngoài Gateway là /api/v1. Response đề xuất theo frontend/API_
 - [Hợp đồng API dự kiến](../../frontend/API_CONTRACT.md)
 - [Mô tả frontend và giới hạn mock](../../frontend/README.md)
 - [Biểu đồ use case tổng quan](../uml/use-case-overview.md)
-- [Cấu hình Gateway hiện tại](../../backend/api-gateway/src/main/resources/application.yml)
+- [Cấu hình Gateway hiện tại](../../backend/api-gateway/src/main/resources/application.properties)
 - [Docker Compose phát triển](../../infrastructure/docker/compose.dev.yaml)
+- [PayOS API tạo link và webhook](https://payos.vn/docs/api/)
+- [PayOS webhook](https://payos.vn/docs/du-lieu-tra-ve/webhook/)
+- [PayOS return URL](https://payos.vn/docs/du-lieu-tra-ve/return-url/)
