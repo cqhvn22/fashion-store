@@ -10,6 +10,6 @@ COPY api-gateway/src api-gateway/src
 RUN mvn -B -pl api-gateway -am -DskipTests package
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-COPY --from=build /workspace/api-gateway/target/api-gateway-0.1.0-SNAPSHOT.jar app.jar
+COPY --from=build /workspace/api-gateway/target/quarkus-app/ /app/
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", "-jar", "/app/quarkus-run.jar"]

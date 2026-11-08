@@ -21,8 +21,8 @@ Phạm vi bản MVP được rút từ các route tại frontend/src/app/App.tsx
 | Thành phần | Đã có | Cần triển khai |
 | --- | --- | --- |
 | Frontend | Giao diện và các luồng chính bằng mock data; giỏ hàng, yêu thích và một số dữ liệu lưu ở trình duyệt. | Kết nối và kiểm thử với API thật; thay các adapter còn dùng mock. |
-| API Gateway | Ứng dụng Spring Boot và định tuyến cơ bản. | Xác thực/ủy quyền ở lớp phù hợp, CORS, định tuyến đầy đủ, quan sát và xử lý lỗi. |
-| Auth, Catalog, Order, Notification | Khung Spring Boot, cấu hình và health check. | Controller, nghiệp vụ, migration, truy cập CSDL, bảo mật và kiểm thử. |
+| API Gateway | Ứng dụng Quarkus chuyển tiếp các đường dẫn /api/v1 và có health check. | Xác thực/ủy quyền ở lớp phù hợp, quan sát và xử lý lỗi đầy đủ. |
+| Auth, Catalog, Order, Notification | Khung Quarkus, cấu hình và health check. | Resource, nghiệp vụ, migration, truy cập CSDL, bảo mật và kiểm thử. |
 | AI service | FastAPI với health check. | Chat, quản trị tri thức, ingestion, embeddings và retrieval thực. |
 | Kafka, PostgreSQL, MongoDB | Có cấu hình Compose phát triển. | Topic, database riêng, migration và tích hợp service. |
 

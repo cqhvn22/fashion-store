@@ -8,7 +8,7 @@ Hãy xây dựng TOÀN BỘ FRONTEND cho đề tài:
 
 Đây là đồ án sinh viên ngành Công nghệ thông tin, nhưng chất lượng mã nguồn cần hướng tới một dự án phần mềm thực tế, có cấu trúc rõ ràng, dễ đọc, dễ bảo trì, dễ mở rộng và dễ tích hợp Backend.
 
-Frontend cần hoàn chỉnh ở mức có thể sử dụng để demo toàn bộ luồng mua hàng, quản trị và chatbot, đồng thời có kiến trúc sẵn sàng kết nối với hệ thống Spring Boot Microservices thông qua API Gateway.
+Frontend cần hoàn chỉnh ở mức có thể sử dụng để demo toàn bộ luồng mua hàng, quản trị và chatbot, đồng thời có kiến trúc sẵn sàng kết nối với hệ thống Quarkus Microservices thông qua API Gateway.
 
 **Yêu cầu quan trọng nhất:**
 
@@ -800,7 +800,7 @@ Frontend phải có hai chế độ:
 
 **1. MOCK MODE:** Chạy bằng dữ liệu mẫu.
 
-**2. API MODE:** Gọi API Spring Boot thông qua API Gateway.
+**2. API MODE:** Gọi API Quarkus thông qua API Gateway.
 
 Ví dụ .env:
 
@@ -874,7 +874,7 @@ Mọi chức năng cần có API service rõ ràng:
 - chatApi
 - knowledgeApi
 
-# IX. HỢP ĐỒNG API DỰ KIẾN VỚI SPRING BOOT
+# IX. HỢP ĐỒNG API DỰ KIẾN VỚI QUARKUS
 
 Sử dụng các endpoint dưới đây làm bản thiết kế sơ bộ và tập trung trong file cấu hình để có thể thay đổi dễ dàng.
 
@@ -934,7 +934,7 @@ Hãy tập trung quản lý chúng tại một vị trí, không hardcode URL ph
 
 # X. TƯƠNG THÍCH VỚI KAFKA, KUBERNETES VÀ MICROSERVICES
 
-Backend của hệ thống sử dụng Spring Boot, Kafka và Kubernetes.
+Backend của hệ thống sử dụng Quarkus, Kafka và Kubernetes.
 
 Frontend không được kết nối trực tiếp với Kafka Broker.
 
@@ -1137,7 +1137,7 @@ Frontend được coi là hoàn thành khi:
 - Có thể chuyển giữa USER và ADMIN theo quyền của mock.
 - Các chức năng quản trị cốt lõi hoạt động bằng mock data có trạng thái thay đổi nhất quán.
 - Chatbot có giao diện hội thoại và dữ liệu phản hồi mẫu.
-- API được tổ chức để tích hợp Spring Boot mà không phải sửa từng trang.
+- API được tổ chức để tích hợp Quarkus mà không phải sửa từng trang.
 - Có cấu hình môi trường.
 - Có tài liệu API Contract.
 - Có README.

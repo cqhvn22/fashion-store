@@ -1,6 +1,6 @@
 # API Contract đề xuất
 
-Base URL: `${VITE_API_BASE_URL}` (ví dụ `http://localhost:8080/api/v1`). Đây là bản thiết kế phía Frontend; cần thống nhất và thử lại với các Spring Boot service. Các response dưới đây bọc trong `ApiResponse<T> = { success: boolean, data: T, message?: string, timestamp?: string }`. Danh sách phân trang dùng `PageResponse<T> = { content, page, size, totalElements, totalPages, last }` trong `data`. Lỗi dự kiến: `{ code, message, details? }` với HTTP 400/401/403/404/409/500.
+Base URL: `${VITE_API_BASE_URL}` (ví dụ `http://localhost:8080/api/v1`). Đây là bản thiết kế phía Frontend; cần thống nhất và thử lại với các Quarkus service. Các response dưới đây bọc trong `ApiResponse<T> = { success: boolean, data: T, message?: string, timestamp?: string }`. Danh sách phân trang dùng `PageResponse<T> = { content, page, size, totalElements, totalPages, last }` trong `data`. Lỗi dự kiến: `{ code, message, details? }` với HTTP 400/401/403/404/409/500.
 
 | Service | Method | Endpoint | Request | `data` response | Trang dùng | Trạng thái |
 | --- | --- | --- | --- | --- | --- | --- |

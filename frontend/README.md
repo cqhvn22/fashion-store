@@ -2,7 +2,7 @@
 
 Xem [FRONTEND_STRUCTURE.md](FRONTEND_STRUCTURE.md) để nắm nhanh cấu trúc mã nguồn.
 
-React SPA cho đồ án **website bán thời trang theo kiến trúc Microservices tích hợp AI/RAG**. Ứng dụng chạy độc lập bằng dữ liệu mẫu; các service tập trung API để chuyển sang Spring Boot Gateway.
+React SPA cho đồ án **website bán thời trang theo kiến trúc Microservices tích hợp AI/RAG**. Ứng dụng chạy độc lập bằng dữ liệu mẫu; các service tập trung API để chuyển sang Quarkus API Gateway.
 
 ## Công nghệ
 

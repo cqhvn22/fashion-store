@@ -1,23 +1,23 @@
 # Fashion Microservices
 
 Thư mục này là gốc project. Frontend React/Vite hiện có được giữ nguyên.
-Backend hiện là khung Spring Boot; các API nghiệp vụ chưa được triển khai.
+Backend hiện là khung Quarkus; các API nghiệp vụ chưa được triển khai.
 
 ## Yêu cầu
 
-- Java 21, Maven 3.9+, Node.js 20+, Python 3.11+; Docker Compose nếu chạy bằng container.
-- Spring Boot 3.5.16 và Spring Cloud 2025.0.3.
+- Java 21, Maven 3.9.16+, Node.js 20+, Python 3.11+; Docker Compose nếu chạy bằng container.
+- Quarkus 3.40.1.1 LTS cho năm module Java.
 
 ## Chạy thử
 
 - Frontend: `cd frontend && npm ci && npm run dev`
 - Build backend: `mvn -f backend/pom.xml verify`
-- Chạy từng service: `mvn -f backend/<service>/pom.xml spring-boot:run`
+- Chạy từng service: `mvn -f backend/<service>/pom.xml quarkus:dev`
 - AI service: cài `ai-service/requirements.txt`, rồi chạy `uvicorn app.main:app --app-dir ai-service --port 8000`
 - Docker: `docker compose -f infrastructure/docker/compose.yaml up --build`
 - Thêm PostgreSQL, MongoDB, Kafka: thêm `-f infrastructure/docker/compose.dev.yaml`
 
-Frontend đang bật mock. Backend hiện có health check và gateway routes, chưa có API nghiệp vụ, database, xác thực hoặc messaging. Xem `frontend/API_CONTRACT.md` trước khi chuyển sang API thật.
+Frontend đang bật mock. Các service Quarkus có health check tại `/q/health`; gateway chuyển tiếp các đường dẫn `/api/v1` sang service tương ứng. Backend chưa có API nghiệp vụ, database, xác thực hoặc messaging. Xem `frontend/API_CONTRACT.md` trước khi chuyển sang API thật.
 
 Biểu đồ use case tổng quát và phạm vi từng actor: [docs/uml/use-case-overview.md](docs/uml/use-case-overview.md).
 

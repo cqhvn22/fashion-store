@@ -10,6 +10,6 @@ COPY auth-service/src auth-service/src
 RUN mvn -B -pl auth-service -am -DskipTests package
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-COPY --from=build /workspace/auth-service/target/auth-service-0.1.0-SNAPSHOT.jar app.jar
+COPY --from=build /workspace/auth-service/target/quarkus-app/ /app/
 EXPOSE 8081
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", "-jar", "/app/quarkus-run.jar"]

@@ -10,6 +10,6 @@ COPY notification-service/src notification-service/src
 RUN mvn -B -pl notification-service -am -DskipTests package
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-COPY --from=build /workspace/notification-service/target/notification-service-0.1.0-SNAPSHOT.jar app.jar
+COPY --from=build /workspace/notification-service/target/quarkus-app/ /app/
 EXPOSE 8084
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", "-jar", "/app/quarkus-run.jar"]

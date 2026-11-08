@@ -10,6 +10,6 @@ COPY order-service/src order-service/src
 RUN mvn -B -pl order-service -am -DskipTests package
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-COPY --from=build /workspace/order-service/target/order-service-0.1.0-SNAPSHOT.jar app.jar
+COPY --from=build /workspace/order-service/target/quarkus-app/ /app/
 EXPOSE 8083
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", "-jar", "/app/quarkus-run.jar"]
