@@ -21,6 +21,8 @@ Frontend đang bật mock. Backend hiện có health check và gateway routes, c
 
 Biểu đồ use case tổng quát và phạm vi từng actor: [docs/uml/use-case-overview.md](docs/uml/use-case-overview.md).
 
+Bản mô tả chức năng, kiến trúc và SQL CSDL theo service: [docs/architecture/system-description.md](docs/architecture/system-description.md).
+
 | Service | Port |
 | --- | ---: |
 | API gateway | 8080 |
