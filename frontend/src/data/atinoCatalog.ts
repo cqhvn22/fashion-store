@@ -142,7 +142,7 @@ export const atinoCategories: Category[] = [
     "name": "Áo khoác jacket",
     "slug": "ao-jacket",
     "description": "Áo jacket kaki khóa kéo thời thượng, cá tính.",
-    "imageUrl": "/images/products/ao-khoac-jacket-l.1.8601-p37939634_1.jpg",
+    "imageUrl": "/images/products/ao-jaket-kaki-keo-khoa-loose-l.3.8810-p37939876_1.jpg",
     "isActive": true
   },
   {
@@ -151,7 +151,7 @@ export const atinoCategories: Category[] = [
     "name": "Giày & dép nam",
     "slug": "giay-dep",
     "description": "Dép da, giày thể thao nam êm ái, bền bỉ.",
-    "imageUrl": "/images/products/dep-quai-ngang-l.2.404-p37939886_1.jpg",
+    "imageUrl": "/images/products/dep-da-1.9801-p37937635_1.jpg",
     "isActive": true
   },
   {
@@ -160,7 +160,7 @@ export const atinoCategories: Category[] = [
     "name": "Túi chéo & balo",
     "slug": "tui-balo",
     "description": "Túi đeo chéo, balo nam tiện dụng mọi lúc.",
-    "imageUrl": "/images/products/tui-deo-cheo-phong-cach-l.1.5202-p37939798_1.jpg",
+    "imageUrl": "/images/products/tui-cheo-1.9349-p37707143_1.jpeg",
     "isActive": true
   },
   {
@@ -169,7 +169,7 @@ export const atinoCategories: Category[] = [
     "name": "Mũ nón nam",
     "slug": "mu",
     "description": "Mũ lưỡi trai, mũ phong cách thể thao cá tính.",
-    "imageUrl": "/images/products/mu-luoi-trai-the-thao-l.1.5101-p37939795_1.jpg",
+    "imageUrl": "/images/products/m201-mu-moormoor-p37927503_1.jpeg",
     "isActive": true
   },
   {
@@ -178,7 +178,7 @@ export const atinoCategories: Category[] = [
     "name": "Dây lưng da",
     "slug": "day-lung",
     "description": "Thắt lưng da bò cao cấp, khóa kim loại sang trọng.",
-    "imageUrl": "/images/products/day-lung-da-khoa-kim-l.1.5001-p37939790_1.jpg",
+    "imageUrl": "/images/products/that-lung-1.9900-p37717637_1.jpg",
     "isActive": true
   },
   {

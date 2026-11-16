@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { categoryService, productService } from '../services/catalog';
 import { categories as seedCategories, seedProducts } from '../mocks/catalog';
+import { atinoCategories } from '../data/atinoCatalog';
 import { useAuthStore } from '../stores/authStore';
 import { useCartStore } from '../stores/cartStore';
 import { useWishlistStore } from '../stores/wishlistStore';
@@ -36,7 +37,10 @@ import { NotificationBell } from './NotificationBell';
 import { NotificationToast } from './NotificationToast';
 import { getThumbnailUrl, showOriginalOrPlaceholder } from '../utils/images';
 
-const CATEGORY_THUMBNAILS_CACHE_KEY = 'fashionhub_category_thumbnails_cache_v1';
+const CATEGORY_THUMBNAILS_CACHE_KEY = 'fashionhub_category_thumbnails_cache_v2';
+const defaultCategoryImages = new Map(
+  atinoCategories.filter((category) => category.imageUrl).map((category) => [category.slug, category.imageUrl]),
+);
 
 interface CachedCategoryThumbnail {
   imageUrl: string;
@@ -67,6 +71,7 @@ export function Header() {
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
+  const [openedCategories, setOpenedCategories] = useState<Set<string>>(() => new Set());
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -109,7 +114,8 @@ export function Header() {
 
     for (const cat of categories) {
       const catDirectImage =
-        cat.imageUrl && cat.imageUrl !== '/images/product-placeholder.svg' ? cat.imageUrl : null;
+        (cat.imageUrl && cat.imageUrl !== '/images/product-placeholder.svg' ? cat.imageUrl : null) ||
+        defaultCategoryImages.get(cat.slug) || null;
       const matching = allProducts.filter((p) => p.categoryId === cat.id);
       // Chữ ký đại diện cho danh mục và danh sách sản phẩm hiện tại
       const currentSignature = `${catDirectImage || ''}_${matching.map((p) => p.id).sort().join(',')}`;
@@ -127,8 +133,7 @@ export function Header() {
         hasChanges = true;
         let pickedImage = catDirectImage;
         if (!pickedImage && matching.length > 0) {
-          const randomProd = matching[Math.floor(Math.random() * matching.length)];
-          pickedImage = randomProd.images[0]?.url || null;
+          pickedImage = [...matching].sort((a, b) => a.id.localeCompare(b.id))[0].images[0]?.url || null;
         }
         if (!pickedImage) {
           const fallback = allProducts.find(
@@ -159,6 +164,7 @@ export function Header() {
   const handleCategoryHover = (catId: string | null, delay = 0) => {
     clearHoverTimeout();
     if (catId) {
+      setOpenedCategories((opened) => opened.has(catId) ? opened : new Set(opened).add(catId));
       setHoveredCategory(catId);
     } else {
       if (delay > 0) {
@@ -450,9 +456,10 @@ export function Header() {
                         className="lg:hidden p-3 text-stone-500 hover:text-ink"
                         aria-label={`${expandedCategory === item.id ? 'Thu gọn' : 'Mở'} danh mục ${label}`}
                         aria-expanded={expandedCategory === item.id}
-                        onClick={() =>
-                          setExpandedCategory(expandedCategory === item.id ? null : item.id)
-                        }
+                        onClick={() => {
+                          setOpenedCategories((opened) => opened.has(item.id) ? opened : new Set(opened).add(item.id));
+                          setExpandedCategory(expandedCategory === item.id ? null : item.id);
+                        }}
                       >
                         <ChevronDown
                           size={18}
@@ -465,11 +472,12 @@ export function Header() {
                   </div>
 
                   {/* Mega-Menu Dropdown */}
-                  {children.length > 0 && (hoveredCategory === item.id || expandedCategory === item.id) && (
+                  {children.length > 0 && openedCategories.has(item.id) && (
                     <div
                       className={`nav-dropdown text-ink bg-white ${
                         expandedCategory === item.id ? 'block' : 'hidden'
                       } ${hoveredCategory === item.id ? 'lg:block' : 'lg:hidden'}`}
+                      aria-hidden={hoveredCategory !== item.id && expandedCategory !== item.id}
                       onMouseEnter={() => handleCategoryHover(item.id)}
                       onMouseLeave={() => handleCategoryHover(null, 300)}
                     >
@@ -518,6 +526,8 @@ export function Header() {
                                     src={imgUrl}
                                     alt=""
                                     aria-hidden="true"
+                                    loading="lazy"
+                                    decoding="async"
                                     className="w-full h-full object-contain"
                                     onError={(e) => showOriginalOrPlaceholder(e, rawImgUrl)}
                                   />

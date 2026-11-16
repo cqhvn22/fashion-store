@@ -74,7 +74,50 @@ function devMockSyncPlugin() {
   };
 }
 
+function productImageCachePlugin() {
+  const imageRoot = path.resolve(__dirname, 'public/images/products');
+  const mimeTypes: Record<string, string> = {
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
+  };
+  return {
+    name: 'product-image-cache',
+    configureServer(server: any) {
+      server.middlewares.use((req: any, res: any, next: any) => {
+        if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+        let pathname: string;
+        try {
+          pathname = decodeURIComponent(new URL(req.url || '/', 'http://localhost').pathname);
+        } catch {
+          return next();
+        }
+        const prefix = '/images/products/';
+        if (!pathname.startsWith(prefix)) return next();
+
+        const filePath = path.resolve(imageRoot, pathname.slice(prefix.length));
+        const mimeType = mimeTypes[path.extname(filePath).toLowerCase()];
+        if (!filePath.startsWith(imageRoot + path.sep) || !mimeType) {
+          res.statusCode = 404;
+          res.end();
+          return;
+        }
+        fs.stat(filePath, (error, stats) => {
+          if (error || !stats.isFile()) {
+            res.statusCode = 404;
+            res.end();
+            return;
+          }
+          res.setHeader('Content-Type', mimeType);
+          res.setHeader('Content-Length', stats.size);
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          if (req.method === 'HEAD') res.end();
+          else fs.createReadStream(filePath).pipe(res);
+        });
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), devMockSyncPlugin()],
+  plugins: [react(), devMockSyncPlugin(), productImageCachePlugin()],
   test: { environment: 'jsdom', setupFiles: './src/tests/setup.ts', testTimeout: 10000 },
 });

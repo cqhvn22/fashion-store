@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { getMockCategories, getMockProducts, productService } from '../services/catalog';
 import { atinoCategories, atinoProducts } from '../data/atinoCatalog';
+import { getThumbnailUrl } from '../utils/images';
 
 describe('Bộ dữ liệu sản phẩm ATINO', () => {
   it('đã nạp đủ 280 sản phẩm và 21 danh mục từ Atino', () => {
@@ -32,6 +35,16 @@ describe('Bộ dữ liệu sản phẩm ATINO', () => {
         expect(v.size).toBeTruthy();
         expect(v.price).toBe(p.minPrice);
         expect(v.imageUrl).toMatch(/^\/images\/products\//);
+      }
+    }
+  });
+
+  it('ảnh danh mục trong menu có tệp gốc và thumbnail thật', () => {
+    for (const category of atinoCategories) {
+      const imageUrl = category.imageUrl;
+      expect(imageUrl).toBeTruthy();
+      for (const url of [imageUrl, getThumbnailUrl(imageUrl)]) {
+        expect(existsSync(path.resolve('public', url!.slice(1))), url).toBe(true);
       }
     }
   });

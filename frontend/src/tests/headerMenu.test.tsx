@@ -22,7 +22,7 @@ describe('menu danh mục', () => {
     const dropdown = group!.querySelector('.nav-dropdown');
     expect(dropdown).toHaveClass('lg:block');
     fireEvent.click(screen.getByRole('link', { name: 'Áo khoác gió' }));
-    await waitFor(() => expect(group!.querySelector('.nav-dropdown')).toBeNull());
+    await waitFor(() => expect(group!.querySelector('.nav-dropdown')).toHaveClass('lg:hidden'));
     expect(container.querySelector('#shop-navigation')).toHaveClass('hidden');
     client.clear();
   });
@@ -75,7 +75,7 @@ describe('menu danh mục', () => {
     // 5. Rời khỏi dropdown hoàn toàn
     fireEvent.mouseLeave(dropdown!);
     // Sau khi hết grace period (>300ms), menu sẽ tự động đóng
-    await waitFor(() => expect(group!.querySelector('.nav-dropdown')).toBeNull(), { timeout: 1000 });
+    await waitFor(() => expect(group!.querySelector('.nav-dropdown')).toHaveClass('lg:hidden'), { timeout: 1000 });
 
     client.clear();
   });
@@ -95,7 +95,7 @@ describe('menu danh mục', () => {
     fireEvent.mouseEnter(group!);
 
     // Kiểm tra dữ liệu thumbnails đã được lưu vào localStorage
-    const cacheKey = 'fashionhub_category_thumbnails_cache_v1';
+    const cacheKey = 'fashionhub_category_thumbnails_cache_v2';
     const rawCache = localStorage.getItem(cacheKey);
     expect(rawCache).not.toBeNull();
     const cache = JSON.parse(rawCache!);
@@ -119,6 +119,7 @@ describe('menu danh mục', () => {
     const secondImg = group!.querySelector('.nav-dropdown img') as HTMLImageElement;
     // Ảnh thumbnail phải giữ nguyên, không đổi src, không sinh ngẫu nhiên lại
     expect(secondImg.src).toBe(firstSrc);
+    expect(secondImg).toBe(firstImg);
 
     // Dữ liệu trong localStorage vẫn được giữ nguyên
     const rawCacheAfter = localStorage.getItem(cacheKey);
