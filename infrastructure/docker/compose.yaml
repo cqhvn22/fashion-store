@@ -1,7 +1,45 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fashion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:-fashion}
+    ports: ["15432:5432"]
+    volumes: ["postgres_data:/var/lib/postgresql/data", "../postgres/init:/docker-entrypoint-initdb.d:ro"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fashion} -d ${POSTGRES_DB:-fashion}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  kafka:
+    image: apache/kafka:3.9.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports: ["9092:9092"]
+    volumes: ["kafka_data:/var/lib/kafka/data"]
   frontend:
-    build: ../../frontend
+    build:
+      context: ../../frontend
+      args:
+        VITE_USE_DB_AUTH: "true"
+        VITE_USE_DB_CATALOG: "true"
+        VITE_USE_DB_ORDERS: "true"
+        VITE_USE_DB_AI: "true"
+        VITE_API_BASE_URL: /api/v1
     ports: ["3000:80"]
+    depends_on: [api-gateway]
   api-gateway:
     build: {context: ../../backend, dockerfile: api-gateway/Dockerfile}
     environment:
@@ -9,20 +47,100 @@ services:
       CATALOG_SERVICE_URL: http://catalog-service:8082
       ORDER_SERVICE_URL: http://order-service:8083
       AI_SERVICE_URL: http://ai-service:8000
+      NOTIFICATION_SERVICE_URL: http://notification-service:8084
     ports: ["8080:8080"]
-    depends_on: [auth-service, catalog-service, order-service, ai-service]
+    depends_on: [auth-service, catalog-service, order-service, notification-service, ai-service]
   auth-service:
     build: {context: ../../backend, dockerfile: auth-service/Dockerfile}
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/fashion_auth
+      POSTGRES_USER: ${POSTGRES_USER:-fashion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      JWT_VERIFY_JWK: ${JWT_VERIFY_JWK:?Set JWT_VERIFY_JWK}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Set INTERNAL_API_KEY}
+    depends_on:
+      postgres: {condition: service_healthy}
     ports: ["8081:8081"]
   catalog-service:
     build: {context: ../../backend, dockerfile: catalog-service/Dockerfile}
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/fashion_catalog
+      POSTGRES_USER: ${POSTGRES_USER:-fashion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      JWT_VERIFY_JWK: ${JWT_VERIFY_JWK:?Set JWT_VERIFY_JWK}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Set INTERNAL_API_KEY}
+      CATALOG_MEDIA_DIRECTORY: /app/uploads
+      ORDER_SERVICE_URL: http://order-service:8083
+      AI_SERVICE_URL: http://ai-service:8000
+    depends_on:
+      postgres: {condition: service_healthy}
     ports: ["8082:8082"]
+    expose: ["9000"]
+    volumes: ["catalog_media:/app/uploads"]
   order-service:
     build: {context: ../../backend, dockerfile: order-service/Dockerfile}
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/fashion_order
+      POSTGRES_USER: ${POSTGRES_USER:-fashion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      JWT_VERIFY_JWK: ${JWT_VERIFY_JWK:?Set JWT_VERIFY_JWK}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Set INTERNAL_API_KEY}
+      CATALOG_GRPC_HOST: catalog-service
+      CATALOG_GRPC_PORT: 9000
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:-disabled}
+      PAYOS_API_KEY: ${PAYOS_API_KEY:-disabled}
+      PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:-disabled}
+      PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:-http://localhost:5173/payment/success}
+      PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:-http://localhost:5173/payment/cancel}
+    depends_on:
+      postgres: {condition: service_healthy}
+      catalog-service: {condition: service_started}
     ports: ["8083:8083"]
   notification-service:
     build: {context: ../../backend, dockerfile: notification-service/Dockerfile}
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/fashion_notification
+      POSTGRES_USER: ${POSTGRES_USER:-fashion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_VERIFY_JWK: ${JWT_VERIFY_JWK:?Set JWT_VERIFY_JWK}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Set INTERNAL_API_KEY}
+      AUTH_SERVICE_URL: http://auth-service:8081
+    depends_on:
+      postgres: {condition: service_healthy}
+      kafka: {condition: service_started}
+      auth-service: {condition: service_started}
     ports: ["8084:8084"]
   ai-service:
     build: ../../ai-service
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fashion}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/fashion_ai
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Set INTERNAL_API_KEY}
+      AI_PROVIDER: ${AI_PROVIDER:-openrouter}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      CATALOG_SERVICE_URL: http://catalog-service:8082
+      ORDER_SERVICE_URL: http://order-service:8083
+      WORKBOOK_PATH: /data/atino_products.xlsx
+      PRODUCT_SYNC_SECONDS: ${PRODUCT_SYNC_SECONDS:-90}
+      AI_API_KEY: ${AI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-${AI_API_KEY:-}}
+      AI_API_BASE_URL: ${AI_API_BASE_URL:-https://openrouter.ai/api/v1}
+      AI_EMBEDDING_MODEL: ${AI_EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      AI_CHAT_MODEL: ${AI_CHAT_MODEL:-nvidia/nemotron-3-ultra-550b-a55b:free}
+    depends_on:
+      postgres: {condition: service_healthy}
+      catalog-service: {condition: service_started}
     ports: ["8000:8000"]
+    volumes: ["../../ai-service/atino_products.xlsx:/data/atino_products.xlsx:ro"]
+volumes:
+  postgres_data:
+  kafka_data:
+  catalog_media:

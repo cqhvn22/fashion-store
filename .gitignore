@@ -1,5 +1,6 @@
 .env
 **/.env
+**/.env.development
 **/node_modules/
 **/dist/
 **/target/

@@ -1,21 +1,66 @@
 import { categories, seedProducts } from '../mocks/catalog';
 import type { Category, PageResponse, Product, ProductQuery } from '../types/models';
 import { endpoints } from './endpoints';
-import { httpClient, mockMode } from './httpClient';
+import { httpClient, useDbCatalog } from './httpClient';
+import { applyPromotionsToProductList, getMockPromotions } from './promotions';
 import { readLocal, writeLocal } from './storage';
 
 const key = 'fashionhub_products';
-export const getMockProducts = () => readLocal<Product[]>(key, seedProducts);
+const DATASET_VERSION_KEY = 'fashionhub_catalog_dataset_version';
+const CURRENT_DATASET_VERSION = 'atino_pure_v2';
+
+export const getMockCategories = () => {
+  const storageKey = 'fashionhub_categories';
+  try {
+    if (localStorage.getItem(DATASET_VERSION_KEY) !== CURRENT_DATASET_VERSION) {
+      writeLocal(storageKey, categories);
+      return categories;
+    }
+  } catch {
+    /* ignore */
+  }
+  return readLocal<Category[]>(storageKey, categories);
+};
+
 export const saveMockProducts = (products: Product[]) => writeLocal(key, products);
-export const getMockCategories = () => readLocal<Category[]>('fashionhub_categories', categories);
+
+export const getMockProducts = () => {
+  let stored = readLocal<Product[]>(key, seedProducts);
+  try {
+    if (localStorage.getItem(DATASET_VERSION_KEY) !== CURRENT_DATASET_VERSION) {
+      writeLocal(key, seedProducts);
+      localStorage.setItem(DATASET_VERSION_KEY, CURRENT_DATASET_VERSION);
+      stored = seedProducts;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const promos = getMockPromotions();
+  return applyPromotionsToProductList(stored, promos, getMockCategories());
+};
 export const categoryService = {
   async list(): Promise<Category[]> {
-    if (mockMode) return getMockCategories();
+    if (!useDbCatalog) return getMockCategories();
     const { data } = await httpClient.get<{ data: Category[] }>(endpoints.categories);
     return data.data;
   },
+  async listAdmin(): Promise<Category[]> {
+    if (!useDbCatalog) return getMockCategories();
+    const { data } = await httpClient.get<{ data: Category[] }>('/admin/categories');
+    return data.data;
+  },
   async save(category: Category) {
-    if (!mockMode) throw new Error('Chưa tích hợp API quản lý danh mục.');
+    if (useDbCatalog) {
+      const payload = {
+        name: category.name, slug: category.slug, description: category.description,
+        imageUrl: category.imageUrl, parentId: category.parentId ?? null,
+        isActive: category.isActive,
+      };
+      if (category.id) await httpClient.put(`/admin/categories/${category.id}`, payload);
+      else await httpClient.post('/admin/categories', payload);
+      return;
+    }
     const items = getMockCategories();
     writeLocal(
       'fashionhub_categories',
@@ -25,7 +70,12 @@ export const categoryService = {
     );
   },
   async remove(id: string) {
-    if (!mockMode) throw new Error('Chưa tích hợp API quản lý danh mục.');
+    if (useDbCatalog) {
+      await httpClient.delete(`/admin/categories/${id}`);
+      return;
+    }
+    if (getMockCategories().some((item) => item.parentId === id))
+      throw new Error('Danh mục đang có danh mục con, không thể xóa.');
     if (getMockProducts().some((item) => item.categoryId === id))
       throw new Error('Danh mục đang có sản phẩm, không thể xóa.');
     writeLocal(
@@ -35,8 +85,28 @@ export const categoryService = {
   },
 };
 export const productService = {
+  async listAdmin(): Promise<Product[]> {
+    if (!useDbCatalog) return getMockProducts();
+    const items: Product[] = [];
+    let page = 1;
+    while (true) {
+      const { data } = await httpClient.get<{ data: PageResponse<Product> }>('/admin/products', { params: { page, limit: 100 } });
+      items.push(...data.data.content);
+      if (data.data.last) return items;
+      page += 1;
+    }
+  },
+  async adminById(id: string): Promise<Product> {
+    if (!useDbCatalog) {
+      const item = getMockProducts().find((product) => product.id === id);
+      if (!item) throw new Error('Không tìm thấy sản phẩm.');
+      return item;
+    }
+    const { data } = await httpClient.get<{ data: Product }>(`/admin/products/${id}`);
+    return data.data;
+  },
   async list(query: ProductQuery = {}): Promise<PageResponse<Product>> {
-    if (!mockMode) {
+    if (useDbCatalog) {
       const { data } = await httpClient.get<{ data: PageResponse<Product> }>(endpoints.products, {
         params: query,
       });
@@ -44,8 +114,20 @@ export const productService = {
     }
     let items = getMockProducts().filter((item) => item.status === 'ACTIVE');
     if (query.category) {
-      const category = getMockCategories().find((item) => item.slug === query.category);
-      items = items.filter((item) => item.categoryId === category?.id);
+      const all = getMockCategories();
+      const category = all.find((item) => item.slug === query.category);
+      const ids = new Set(category ? [category.id] : []);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const child of all) {
+          if (child.parentId && ids.has(child.parentId) && !ids.has(child.id)) {
+            ids.add(child.id);
+            changed = true;
+          }
+        }
+      }
+      items = items.filter((item) => ids.has(item.categoryId));
     }
     if (query.q)
       items = items.filter((item) =>
@@ -77,16 +159,26 @@ export const productService = {
     };
   },
   async bySlug(slug: string): Promise<Product> {
-    if (mockMode) {
-      const product = getMockProducts().find((item) => item.slug === slug);
+    if (!useDbCatalog) {
+      const product = getMockProducts().find((item) => item.slug === slug || item.id === slug);
       if (!product) throw new Error('Không tìm thấy sản phẩm.');
       return product;
     }
-    const { data } = await httpClient.get<{ data: Product }>(endpoints.productSlug(slug));
-    return data.data;
+    try {
+      const { data } = await httpClient.get<{ data: Product }>(endpoints.productSlug(slug));
+      return data.data;
+    } catch (err) {
+      // Fallback nếu tham số là productId
+      try {
+        const { data } = await httpClient.get<{ data: Product }>(`${endpoints.products}/${slug}`);
+        return data.data;
+      } catch {
+        throw err;
+      }
+    }
   },
   async byId(id: string): Promise<Product> {
-    if (mockMode) {
+    if (!useDbCatalog) {
       const product = getMockProducts().find((item) => item.id === id);
       if (!product) throw new Error('Không tìm thấy sản phẩm.');
       return product;
@@ -95,8 +187,8 @@ export const productService = {
     return data.data;
   },
   async save(product: Product): Promise<Product> {
-    if (!mockMode) {
-      const { data } = product.id
+    if (useDbCatalog) {
+      const { data } = product.id && product.id !== 'new'
         ? await httpClient.put<{ data: Product }>(
             `${endpoints.admin.products}/${product.id}`,
             product,
@@ -112,7 +204,7 @@ export const productService = {
     return product;
   },
   async remove(id: string) {
-    if (!mockMode) {
+    if (useDbCatalog) {
       await httpClient.delete(`${endpoints.admin.products}/${id}`);
       return;
     }

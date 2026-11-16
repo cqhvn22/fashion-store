@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { AlertCircle, ArrowRight, PackageOpen } from 'lucide-react';
 import { Link } from 'react-router-dom';
+
 export function PageHeading({
   eyebrow,
   title,
@@ -13,16 +14,46 @@ export function PageHeading({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-4 mb-7">
+    <div className="flex flex-wrap items-end justify-between gap-4 mb-8 pb-4 border-b border-[#eee]">
       <div>
         {eyebrow && <span className="eyebrow">{eyebrow}</span>}
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-ink">{title}</h1>
-        {description && <p className="text-slate-500 mt-2">{description}</p>}
+        <h1 className="page-title">{title}</h1>
+        {description && <p className="text-sm text-[#666] mt-2 max-w-2xl">{description}</p>}
       </div>
       {action}
     </div>
   );
 }
+
+export function SectionHeading({
+  title,
+  subtitle,
+  href,
+  linkText = 'XEM TẤT CẢ',
+}: {
+  title: string;
+  subtitle?: string;
+  href?: string;
+  linkText?: string;
+}) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-6 pb-2 border-b-2 border-ink">
+      <div>
+        <h2 className="section-title">{title}</h2>
+        {subtitle && <p className="text-xs text-[#767676] mt-1">{subtitle}</p>}
+      </div>
+      {href && (
+        <Link
+          className="text-xs font-bold tracking-wider text-ink hover:text-brand flex items-center gap-1 uppercase transition-colors"
+          to={href}
+        >
+          {linkText} <ArrowRight size={14} />
+        </Link>
+      )}
+    </div>
+  );
+}
+
 export function EmptyState({
   title = 'Chưa có dữ liệu',
   description,
@@ -34,19 +65,20 @@ export function EmptyState({
 }) {
   return (
     <div className="state-box">
-      <PackageOpen size={38} strokeWidth={1.4} className="text-slate-400 mb-4" />
-      <h2 className="font-semibold text-lg">{title}</h2>
-      {description && <p className="text-slate-500 mt-1 mb-4">{description}</p>}
+      <PackageOpen size={42} strokeWidth={1.5} className="text-[#888] mb-4" />
+      <h2 className="font-bold text-lg text-ink uppercase tracking-wide">{title}</h2>
+      {description && <p className="text-sm text-[#666] mt-1 mb-5">{description}</p>}
       {action}
     </div>
   );
 }
+
 export function ErrorState({ error, retry }: { error?: Error | null; retry?: () => void }) {
   return (
     <div className="state-box">
-      <AlertCircle size={38} className="text-red-500 mb-4" />
-      <h2 className="font-semibold">Đã có lỗi xảy ra</h2>
-      <p className="text-slate-500 mt-1 mb-4">{error?.message ?? 'Vui lòng thử lại sau.'}</p>
+      <AlertCircle size={42} className="text-brand mb-4" />
+      <h2 className="font-bold text-lg text-ink uppercase tracking-wide">Đã có lỗi xảy ra</h2>
+      <p className="text-sm text-[#666] mt-1 mb-5">{error?.message ?? 'Vui lòng thử lại sau.'}</p>
       {retry && (
         <button className="btn-primary" onClick={retry}>
           Thử lại
@@ -55,40 +87,45 @@ export function ErrorState({ error, retry }: { error?: Error | null; retry?: () 
     </div>
   );
 }
-export function ProductSkeleton() {
+
+export function ProductSkeleton({ count = 8 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-      {Array.from({ length: 8 }, (_, index) => (
-        <div key={index} className="bg-white rounded-md overflow-hidden animate-pulse">
-          <div className="aspect-[4/5] bg-slate-200" />
-          <div className="p-4 space-y-3">
-            <div className="h-4 bg-slate-200 rounded" />
-            <div className="h-4 w-2/3 bg-slate-200 rounded" />
-            <div className="h-5 w-1/2 bg-slate-200 rounded" />
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+      {Array.from({ length: count }, (_, index) => (
+        <div key={index} className="bg-white">
+          {/* 3:4 Image Skeleton with Shimmer */}
+          <div className="aspect-[3/4] shimmer-box w-full mb-3" />
+
+          {/* Swatch Skeleton Dots */}
+          <div className="flex gap-1.5 mb-2.5">
+            <div className="w-3.5 h-3.5 rounded-full shimmer-box" />
+            <div className="w-3.5 h-3.5 rounded-full shimmer-box" />
+            <div className="w-3.5 h-3.5 rounded-full shimmer-box" />
           </div>
+
+          {/* Category Tag */}
+          <div className="h-3 w-12 shimmer-box mb-2" />
+
+          {/* Title Lines */}
+          <div className="space-y-1.5 mb-2.5">
+            <div className="h-3.5 w-full shimmer-box" />
+            <div className="h-3.5 w-2/3 shimmer-box" />
+          </div>
+
+          {/* Price */}
+          <div className="h-4 w-28 shimmer-box" />
         </div>
       ))}
     </div>
   );
 }
-export function SectionHeading({ title, href }: { title: string; href?: string }) {
-  return (
-    <div className="flex items-center justify-between mb-5">
-      <h2 className="text-xl md:text-2xl font-bold tracking-tight">{title}</h2>
-      {href && (
-        <Link className="text-brand font-medium flex items-center gap-1 hover:underline" to={href}>
-          Xem tất cả <ArrowRight size={16} />
-        </Link>
-      )}
-    </div>
-  );
-}
+
 export function Badge({
   children,
   tone = 'neutral',
 }: {
   children: ReactNode;
-  tone?: 'neutral' | 'success' | 'warning' | 'danger';
+  tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'brand' | 'dark';
 }) {
   return <span className={`badge badge-${tone}`}>{children}</span>;
 }

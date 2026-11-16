@@ -1,8 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { RefreshCw, Printer, Layers, Grid } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Badge, EmptyState, ErrorState, PageHeading } from '../../components/common';
+import { OrderTimeline } from '../../components/OrderTimeline';
+import { OrderInvoiceModal } from '../../components/OrderInvoice';
 import { demoUsers } from '../../mocks/catalog';
 import {
   categoryService,
@@ -10,11 +13,32 @@ import {
   productService,
   saveMockProducts,
 } from '../../services/catalog';
-import { knowledgeService, mockConversations } from '../../services/chat';
+import { mockConversations } from '../../services/chat';
 import { orderService } from '../../services/orders';
-import { mockMode } from '../../services/httpClient';
-import type { Category, KnowledgeDocument, OrderStatus, Product } from '../../types/models';
+import { httpClient, mockMode, useDbCatalog } from '../../services/httpClient';
+import { uploadImage } from '../../services/media';
+import { bannerService } from '../../services/banners';
+import type { Category, HomeBanner, Order, OrderStatus, Product, ProductImage } from '../../types/models';
 import { formatCurrency, formatDate, formatOrderStatus } from '../../utils/format';
+import { getCardImageUrl, getThumbnailUrl, showProductPlaceholder } from '../../utils/images';
+import { getPaginationItems } from '../../utils/pagination';
+
+function AdminModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', escape);
+    return () => { document.body.style.overflow = previous; document.removeEventListener('keydown', escape); };
+  }, [onClose]);
+  return <div className="fixed inset-0 z-50 bg-black/60 overflow-y-auto p-3 md:p-8" role="presentation"
+    onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div role="dialog" aria-modal="true" aria-label={title} className="bg-white rounded-2xl shadow-2xl max-w-5xl mx-auto p-5 md:p-8 relative">
+      <button type="button" aria-label="Đóng" onClick={onClose} className="absolute right-4 top-4 text-2xl text-slate-500 hover:text-ink">×</button>
+      {children}
+    </div>
+  </div>;
+}
 
 export function AdminDashboard() {
   const { data: orders = [] } = useQuery({
@@ -24,9 +48,7 @@ export function AdminDashboard() {
   const { data: products = [] } = useQuery({
     queryKey: ['admin-products'],
     queryFn: () =>
-      mockMode
-        ? Promise.resolve(getMockProducts())
-        : productService.list({ limit: 100 }).then((result) => result.content),
+      productService.listAdmin(),
   });
   const revenue = orders
     .filter((item) => item.status === 'DELIVERED')
@@ -47,14 +69,14 @@ export function AdminDashboard() {
       <PageHeading
         eyebrow="OVERVIEW"
         title="Tổng quan cửa hàng"
-        description="Số liệu minh họa từ dữ liệu demo hiện tại."
+        description="Theo dõi hoạt động của cửa hàng trong một nơi."
       />
       <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         {[
           ['Sản phẩm', products.length],
           ['Đơn hàng', orders.length],
           ['Chờ xử lý', orders.filter((item) => item.status === 'PENDING').length],
-          ['Doanh thu demo', formatCurrency(revenue)],
+          ['Doanh thu', formatCurrency(revenue)],
         ].map(([label, value]) => (
           <div key={label} className="panel">
             <p className="text-slate-500 text-sm">{label}</p>
@@ -115,6 +137,7 @@ export function AdminDashboard() {
   );
 }
 export function AdminProducts() {
+  const [editingId, setEditingId] = useState<string | null>(null);
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],
     queryFn: categoryService.list,
@@ -122,24 +145,47 @@ export function AdminProducts() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const client = useQueryClient();
   const { data: products = [], refetch } = useQuery({
     queryKey: ['admin-products'],
     queryFn: () =>
-      mockMode
-        ? Promise.resolve(getMockProducts())
-        : productService.list({ limit: 100 }).then((result) => result.content),
+      productService.listAdmin(),
   });
-  const filtered = products.filter(
-    (item) =>
-      item.name.toLowerCase().includes(search.toLowerCase()) && (!status || item.status === status),
-  );
-  const shown = filtered.slice((page - 1) * 10, page * 10);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return products.filter((item) => {
+      const matchSearch = !q || item.name.toLowerCase().includes(q) || item.slug.toLowerCase().includes(q);
+      const matchStatus = !status || item.status === status;
+      return matchSearch && matchStatus;
+    });
+  }, [products, search, status]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  const shown = useMemo(() => {
+    return filtered.slice((page - 1) * pageSize, page * pageSize);
+  }, [filtered, page, pageSize]);
+
   const remove = async (id: string) => {
     if (!window.confirm('Xóa sản phẩm này?')) return;
-    await productService.remove(id);
-    await client.invalidateQueries();
-    void refetch();
+    // Cập nhật lạc quan (optimistic): gỡ sản phẩm khỏi cache ngay tức thì để UI không giật hay reload
+    client.setQueryData<Product[]>(['admin-products'], (old) => old?.filter((p) => p.id !== id) ?? []);
+    try {
+      await productService.remove(id);
+      void client.invalidateQueries({ queryKey: ['admin-products'], refetchType: 'none' });
+      void client.invalidateQueries({ queryKey: ['products'] });
+    } catch {
+      alert('Không thể xóa sản phẩm.');
+      void refetch();
+    }
   };
   return (
     <>
@@ -147,9 +193,9 @@ export function AdminProducts() {
         eyebrow="CATALOG"
         title="Quản lý sản phẩm"
         action={
-          <Link className="btn-primary" to="/admin/products/create">
+          <button className="btn-primary" onClick={() => setEditingId('new')}>
             + Thêm sản phẩm
-          </Link>
+          </button>
         }
       />
       <div className="panel">
@@ -167,7 +213,10 @@ export function AdminProducts() {
           <select
             className="field w-44"
             value={status}
-            onChange={(event) => setStatus(event.target.value)}
+            onChange={(event) => {
+              setStatus(event.target.value);
+              setPage(1);
+            }}
           >
             <option value="">Tất cả trạng thái</option>
             <option value="ACTIVE">Đang bán</option>
@@ -192,15 +241,42 @@ export function AdminProducts() {
                   <td>
                     <div className="flex items-center gap-3 min-w-60">
                       <img
-                        src={item.images[0]?.url}
+                        src={getThumbnailUrl(item.images[0]?.url)}
                         alt=""
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          const raw = item.images[0]?.url;
+                          if (raw && target.src !== raw) {
+                            target.src = raw;
+                          } else {
+                            showProductPlaceholder(e);
+                          }
+                        }}
                         className="w-12 h-14 object-cover rounded"
                       />
                       <span className="font-medium">{item.name}</span>
                     </div>
                   </td>
                   <td>{categories.find((category) => category.id === item.categoryId)?.name}</td>
-                  <td>{formatCurrency(item.minPrice)}</td>
+                  <td>
+                    <div>
+                      <div className="font-semibold text-ink">{formatCurrency(item.minPrice)}</div>
+                      {item.originalPrice && item.originalPrice > item.minPrice && (
+                        <div className="text-[11px] text-slate-400 line-through">
+                          {formatCurrency(item.originalPrice)}
+                        </div>
+                      )}
+                      {item.promotion && (
+                        <Link
+                          to="/admin/promotions"
+                          className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-brand bg-red-50 border border-red-200 px-1.5 py-0.5 rounded hover:bg-red-100 transition-colors"
+                          title="Bấm để xem quản lý khuyến mãi"
+                        >
+                          🏷️ {item.promotion.name}
+                        </Link>
+                      )}
+                    </div>
+                  </td>
                   <td>
                     <Badge tone={item.status === 'ACTIVE' ? 'success' : 'neutral'}>
                       {item.status}
@@ -208,10 +284,10 @@ export function AdminProducts() {
                   </td>
                   <td>
                     <div className="flex gap-3">
-                      <Link className="text-brand" to={`/admin/products/${item.id}/edit`}>
+                      <button className="text-brand font-medium hover:underline" onClick={() => setEditingId(item.id)}>
                         Sửa
-                      </Link>
-                      <button className="text-red-600" onClick={() => void remove(item.id)}>
+                      </button>
+                      <button className="text-red-600 font-medium hover:underline" onClick={() => void remove(item.id)}>
                         Xóa
                       </button>
                     </div>
@@ -222,77 +298,233 @@ export function AdminProducts() {
           </table>
         </div>
         {!filtered.length && <EmptyState title="Không có sản phẩm phù hợp" />}
-        <div className="flex justify-end items-center gap-3 mt-5 text-sm">
-          <button disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            ← Trước
-          </button>
-          <span>
-            {page} / {Math.max(1, Math.ceil(filtered.length / 10))}
-          </span>
-          <button disabled={page * 10 >= filtered.length} onClick={() => setPage(page + 1)}>
-            Sau →
-          </button>
-        </div>
+        {filtered.length > 0 && (
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 mt-6 pt-4 border-t border-slate-200 text-sm">
+            <div className="flex flex-wrap items-center gap-3 text-slate-600">
+              <span>
+                Hiển thị <strong>{(page - 1) * pageSize + 1}</strong> - <strong>{Math.min(page * pageSize, filtered.length)}</strong> trên tổng số <strong>{filtered.length}</strong> sản phẩm
+              </span>
+              <div className="flex items-center gap-1.5 ml-2">
+                <span className="text-xs text-slate-500">Hiển thị:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="field py-1 px-2 text-xs w-auto bg-white"
+                  aria-label="Số sản phẩm trên mỗi trang"
+                >
+                  <option value={10}>10 / trang</option>
+                  <option value={20}>20 / trang</option>
+                  <option value={50}>50 / trang</option>
+                  <option value={100}>100 / trang</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                className="pager px-2.5 w-auto text-xs"
+                disabled={page <= 1}
+                onClick={() => setPage(1)}
+                title="Về trang đầu"
+              >
+                « Đầu
+              </button>
+              <button
+                type="button"
+                className="pager px-2.5 w-auto text-xs"
+                disabled={page <= 1}
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                title="Trang trước"
+              >
+                ← Trước
+              </button>
+
+              <div className="flex items-center gap-1">
+                {getPaginationItems(page, totalPages).map((item, idx) =>
+                  typeof item === 'number' ? (
+                    <button
+                      key={item}
+                      type="button"
+                      className={`pager ${page === item ? 'active' : ''}`}
+                      onClick={() => setPage(item)}
+                      aria-current={page === item ? 'page' : undefined}
+                    >
+                      {item}
+                    </button>
+                  ) : (
+                    <span
+                      key={`dots-${idx}`}
+                      className="w-7 h-9 flex items-center justify-center text-sm font-bold text-slate-400 select-none tracking-widest"
+                      aria-hidden="true"
+                    >
+                      ...
+                    </span>
+                  )
+                )}
+              </div>
+
+              <button
+                type="button"
+                className="pager px-2.5 w-auto text-xs"
+                disabled={page >= totalPages}
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                title="Trang sau"
+              >
+                Sau →
+              </button>
+              <button
+                type="button"
+                className="pager px-2.5 w-auto text-xs"
+                disabled={page >= totalPages}
+                onClick={() => setPage(totalPages)}
+                title="Đến trang cuối"
+              >
+                Cuối »
+              </button>
+
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1.5 ml-2 pl-2 border-l border-slate-300">
+                  <span className="text-xs text-slate-500">Đến:</span>
+                  <select
+                    value={page}
+                    onChange={(e) => setPage(Number(e.target.value))}
+                    className="field py-1 px-2 text-xs w-auto bg-white font-medium"
+                    aria-label="Chọn số trang trực tiếp"
+                  >
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                      <option key={p} value={p}>
+                        Trang {p}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
+      {editingId && <AdminModal title={editingId === 'new' ? 'Thêm sản phẩm' : 'Sửa sản phẩm'} onClose={() => setEditingId(null)}>
+        <AdminProductForm productId={editingId === 'new' ? undefined : editingId} onClose={() => setEditingId(null)} />
+      </AdminModal>}
     </>
   );
 }
-export function AdminProductForm() {
+export function AdminProductForm({ productId, onClose }: { productId?: string; onClose?: () => void } = {}) {
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],
     queryFn: categoryService.list,
   });
-  const { id } = useParams();
+  const { id: routeId } = useParams();
+  const id = productId ?? routeId;
+  const { data: loaded, isLoading: loadingProduct, error: loadError } = useQuery({
+    queryKey: ['admin-product', id], queryFn: () => productService.adminById(id!), enabled: !!id,
+  });
   const navigate = useNavigate();
   const client = useQueryClient();
-  const existing = id ? getMockProducts().find((item) => item.id === id) : undefined;
+  const existing = loaded;
   const [name, setName] = useState(existing?.name ?? '');
   const [slug, setSlug] = useState(existing?.slug ?? '');
   const [description, setDescription] = useState(existing?.description ?? '');
   const [categoryId, setCategoryId] = useState(existing?.categoryId ?? 'cat-01');
   const [price, setPrice] = useState(existing?.minPrice ?? 0);
-  const [originalPrice, setOriginalPrice] = useState(existing?.originalPrice ?? 0);
-  const [imageUrl, setImageUrl] = useState(existing?.images[0]?.url ?? '');
+  const [images, setImages] = useState<ProductImage[]>(existing?.images ?? []);
+  const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<Product['status']>(existing?.status ?? 'ACTIVE');
   const [variants, setVariants] = useState(
     existing?.variants ?? [
-      { id: crypto.randomUUID(), sku: '', color: 'Đen', size: 'M', price: 0, stockQuantity: 0 },
+      { id: crypto.randomUUID(), sku: '', color: 'Đen', size: 'M', price: 0, stockQuantity: 0, images: [] },
     ],
   );
   const [error, setError] = useState('');
+  useEffect(() => {
+    if (!loaded) return;
+    setName(loaded.name); setSlug(loaded.slug); setDescription(loaded.description);
+    setCategoryId(loaded.categoryId); setPrice(loaded.minPrice);
+    setImages(loaded.images);
+    setStatus(loaded.status); setVariants(loaded.variants.map((item) => ({
+      ...item,
+      images: item.images?.length ? item.images : item.imageUrl
+        ? [{ id: crypto.randomUUID(), url: item.imageUrl, alt: `${loaded.name} ${item.color}`, isPrimary: true }]
+        : [],
+    })));
+  }, [loaded]);
+  useEffect(() => {
+    if (categories.length && !categoryId) setCategoryId(categories[0].id);
+  }, [categories, categoryId]);
+  const addImages = async (files: FileList | null) => {
+    if (!files?.length) return;
+    if (images.length + files.length > 12) { setError('Mỗi sản phẩm có tối đa 12 ảnh.'); return; }
+    setUploading(true); setError('');
+    try {
+      const urls = await Promise.all(Array.from(files).map(uploadImage));
+      setImages((current) => [...current, ...urls.map((url, index) => ({
+        id: crypto.randomUUID(), url, alt: name.trim(), isPrimary: !current.length && index === 0,
+      }))]);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Không tải được ảnh.'); }
+    finally { setUploading(false); }
+  };
+  const updateVariant = (id: string, change: Partial<Product['variants'][number]>) => {
+    setVariants((current) => current.map((item) => item.id === id ? { ...item, ...change } : item));
+  };
+  const addVariantImages = async (id: string, files: FileList | null) => {
+    if (!files?.length) return;
+    const current = variants.find((item) => item.id === id);
+    if (!current || (current.images?.length ?? 0) + files.length > 8) {
+      setError('Mỗi biến thể có tối đa 8 ảnh.'); return;
+    }
+    setUploading(true); setError('');
+    try {
+      const urls = await Promise.all(Array.from(files).map(uploadImage));
+      setVariants((items) => items.map((item) => {
+        if (item.id !== id) return item;
+        const old = item.images ?? [];
+        return { ...item, images: [...old, ...urls.map((url, index) => ({
+          id: crypto.randomUUID(), url, alt: `${name} ${item.color}`,
+          isPrimary: old.length === 0 && index === 0,
+        }))] };
+      }));
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Không tải được ảnh.'); }
+    finally { setUploading(false); }
+  };
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (
-      !name ||
-      !slug ||
-      !imageUrl ||
-      price < 1000 ||
-      variants.some((item) => !item.sku || item.stockQuantity < 0)
+      name.trim().length < 2 || name.trim().length > 250 ||
+      !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 220 ||
+      !categories.some((item) => item.id === categoryId) ||
+      !description.trim() || description.length > 10000 ||
+      !Number.isSafeInteger(price) || price < 1000 ||
+      images.length < 1 || images.length > 12 || images.filter((image) => image.isPrimary).length !== 1 ||
+      variants.length < 1 || variants.length > 100 ||
+      variants.some((item) => !item.sku.trim() || !item.color.trim() || !item.size.trim()
+        || !Number.isSafeInteger(item.stockQuantity) || item.stockQuantity < 0
+        || !Number.isSafeInteger(item.price) || item.price < 1000
+        || (item.images?.length ?? 0) > 8
+        || ((item.images?.length ?? 0) > 0 && item.images?.filter((image) => image.isPrimary).length !== 1)) ||
+      new Set(variants.map((item) => item.sku.trim())).size !== variants.length
     ) {
-      setError('Vui lòng điền đầy đủ thông tin hợp lệ và SKU cho từng biến thể.');
+      setError('Kiểm tra tên, đường dẫn, giá, danh mục, ảnh chính và các lựa chọn sản phẩm.');
       return;
     }
     const now = new Date().toISOString();
     const product: Product = {
-      id: existing?.id ?? crypto.randomUUID(),
+      id: existing?.id ?? (useDbCatalog ? '' : crypto.randomUUID()),
       slug,
       name,
       description,
       categoryId,
-      images: [
-        {
-          id: existing?.images[0]?.id ?? crypto.randomUUID(),
-          url: imageUrl,
-          alt: name,
-          isPrimary: true,
-        },
-      ],
-      variants: variants.map((item) => ({ ...item, price })),
-      minPrice: price,
-      maxPrice: price,
-      originalPrice,
+      images: [...images].sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
+        .map((image) => ({ ...image, alt: image.alt || name.trim() })),
+      variants: variants.map((item) => ({ ...item, sku: item.sku.trim(),
+        imageUrl: item.images?.find((image) => image.isPrimary)?.url })),
+      minPrice: Math.min(...variants.map((item) => item.price)),
+      maxPrice: Math.max(...variants.map((item) => item.price)),
       status,
-      brand: 'FashionHub',
+      brand: existing?.brand ?? 'FashionHub',
       ratingAverage: existing?.ratingAverage ?? 0,
       reviewCount: existing?.reviewCount ?? 0,
       soldCount: existing?.soldCount ?? 0,
@@ -300,22 +532,33 @@ export function AdminProductForm() {
       updatedAt: now,
     };
     try {
-      await productService.save(product);
-      await client.invalidateQueries();
-      navigate('/admin/products');
+      const saved = await productService.save(product);
+      // Optimistic update: cập nhật hoặc thêm sản phẩm vào cache ngay lập tức để không bị reload / lag
+      client.setQueryData<Product[]>(['admin-products'], (old) => {
+        if (!old) return [saved];
+        const exists = old.some((p) => p.id === saved.id);
+        return exists ? old.map((p) => (p.id === saved.id ? saved : p)) : [saved, ...old];
+      });
+      void client.invalidateQueries({ queryKey: ['admin-products'], refetchType: 'none' });
+      void client.invalidateQueries({ queryKey: ['products'] });
+      void client.invalidateQueries({ queryKey: ['admin-product', saved.id] });
+      if (onClose) onClose(); else navigate('/admin/products');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không thể lưu sản phẩm.');
     }
   };
   return (
     <>
-      <PageHeading title={existing ? 'Sửa sản phẩm' : 'Thêm sản phẩm'} eyebrow="CATALOG" />
+      <PageHeading title={id ? 'Sửa sản phẩm' : 'Thêm sản phẩm'} eyebrow="CATALOG" />
+      {loadingProduct && <p>Đang tải sản phẩm...</p>}
+      {loadError && <ErrorState error={new Error('Không tải được sản phẩm.')} />}
+      {!loadingProduct && !loadError &&
       <form onSubmit={(event) => void submit(event)} className="panel space-y-5 max-w-4xl">
         <div className="grid md:grid-cols-2 gap-4">
           <label className="form-label">
             Tên sản phẩm
             <input
-              required
+              required minLength={2} maxLength={250}
               className="field"
               value={name}
               onChange={(event) => {
@@ -336,7 +579,7 @@ export function AdminProductForm() {
           <label className="form-label">
             Slug
             <input
-              required
+              required maxLength={220} pattern="[a-z0-9]+(-[a-z0-9]+)*"
               className="field"
               value={slug}
               onChange={(event) => setSlug(event.target.value)}
@@ -369,46 +612,47 @@ export function AdminProductForm() {
             </select>
           </label>
           <label className="form-label">
-            Giá bán (VND)
+            Giá niêm yết mặc định (VND)
             <input
               required
-              min={1000}
+              min={1000} step={1}
               type="number"
               className="field"
               value={price}
-              onChange={(event) => setPrice(Number(event.target.value))}
-            />
-          </label>
-          <label className="form-label">
-            Giá gốc (VND)
-            <input
-              min={0}
-              type="number"
-              className="field"
-              value={originalPrice}
-              onChange={(event) => setOriginalPrice(Number(event.target.value))}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                setPrice(next);
+                setVariants((current) => current.map((item) => item.price === 0 ? { ...item, price: next } : item));
+              }}
             />
           </label>
         </div>
         <label className="form-label">
           Mô tả
           <textarea
-            required
+            required maxLength={10000}
             className="field min-h-28"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
           />
         </label>
-        <label className="form-label">
-          URL ảnh sản phẩm
-          <input
-            required
-            type="url"
-            className="field"
-            value={imageUrl}
-            onChange={(event) => setImageUrl(event.target.value)}
-          />
-        </label>
+        <div className="space-y-3">
+          <label className="form-label">Ảnh sản phẩm (JPG, PNG, WebP; tối đa 5 MB/ảnh)
+            <input type="file" accept="image/jpeg,image/png,image/webp" multiple className="field" disabled={uploading} onChange={(event) => { void addImages(event.target.files); event.target.value = ''; }} />
+          </label>
+          {uploading && <p className="text-sm text-slate-500">Đang tải ảnh...</p>}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {images.map((image) => <div key={image.id} className="border rounded-lg p-2 space-y-2">
+              <img src={image.url} alt={image.alt} className="w-full aspect-square object-cover rounded" />
+              <label className="flex items-center gap-2 text-sm"><input type="radio" name="primaryImage" checked={image.isPrimary} onChange={() => setImages(images.map((item) => ({ ...item, isPrimary: item.id === image.id })))} />Ảnh chính</label>
+              <button type="button" className="text-red-600 text-sm" onClick={() => setImages((current) => {
+                const next = current.filter((item) => item.id !== image.id);
+                if (image.isPrimary && next.length) next[0] = { ...next[0], isPrimary: true };
+                return next;
+              })}>Xóa ảnh</button>
+            </div>)}
+          </div>
+        </div>
         <div>
           <div className="flex justify-between mb-3">
             <h2 className="font-bold">Biến thể & tồn kho</h2>
@@ -425,6 +669,7 @@ export function AdminProductForm() {
                     size: 'M',
                     price,
                     stockQuantity: 0,
+                    images: [],
                   },
                 ])
               }
@@ -432,110 +677,263 @@ export function AdminProductForm() {
               + Thêm biến thể
             </button>
           </div>
-          {variants.map((variant) => (
-            <div
-              key={variant.id}
-              className="grid grid-cols-2 md:grid-cols-[1.5fr_1fr_1fr_1fr_auto] gap-2 mb-2"
-            >
-              <input
-                aria-label="SKU"
-                placeholder="SKU"
-                required
-                className="field"
-                value={variant.sku}
-                onChange={(event) =>
-                  setVariants(
-                    variants.map((item) =>
-                      item.id === variant.id ? { ...item, sku: event.target.value } : item,
-                    ),
-                  )
-                }
-              />
-              <input
-                aria-label="Màu"
-                placeholder="Màu"
-                required
-                className="field"
-                value={variant.color}
-                onChange={(event) =>
-                  setVariants(
-                    variants.map((item) =>
-                      item.id === variant.id ? { ...item, color: event.target.value } : item,
-                    ),
-                  )
-                }
-              />
-              <input
-                aria-label="Size"
-                placeholder="Size"
-                required
-                className="field"
-                value={variant.size}
-                onChange={(event) =>
-                  setVariants(
-                    variants.map((item) =>
-                      item.id === variant.id ? { ...item, size: event.target.value } : item,
-                    ),
-                  )
-                }
-              />
-              <input
-                aria-label="Tồn kho"
-                min={0}
-                type="number"
-                className="field"
-                value={variant.stockQuantity}
-                onChange={(event) =>
-                  setVariants(
-                    variants.map((item) =>
-                      item.id === variant.id
-                        ? { ...item, stockQuantity: Number(event.target.value) }
-                        : item,
-                    ),
-                  )
-                }
-              />
-              <button
-                type="button"
-                disabled={variants.length === 1}
-                onClick={() => setVariants(variants.filter((item) => item.id !== variant.id))}
-                className="text-red-600"
-              >
-                Xóa
-              </button>
+          <div className="overflow-x-auto">
+            <div className="min-w-[780px]">
+              <div className="grid grid-cols-[1.2fr_1fr_0.7fr_1fr_0.8fr_1.4fr_auto] gap-2 mb-2 font-bold text-xs uppercase text-slate-500">
+                <span>SKU</span>
+                <span>Màu</span>
+                <span>Size</span>
+                <span>Giá niêm yết</span>
+                <span>Tồn kho</span>
+                <span>Ảnh biến thể</span>
+                <span></span>
+              </div>
+              {variants.map((variant) => (
+                <div
+                  key={variant.id}
+                  className="grid grid-cols-[1.2fr_1fr_0.7fr_1fr_0.8fr_1.4fr_auto] gap-2 mb-4 items-start border-b pb-4"
+                >
+                  <input
+                    aria-label="SKU"
+                    placeholder="SKU"
+                    required
+                    maxLength={80}
+                    className="field text-xs"
+                    value={variant.sku}
+                    onChange={(event) =>
+                      setVariants(
+                        variants.map((item) =>
+                          item.id === variant.id ? { ...item, sku: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  />
+                  <input
+                    aria-label="Màu"
+                    placeholder="Màu"
+                    required
+                    maxLength={80}
+                    className="field text-xs"
+                    value={variant.color}
+                    onChange={(event) =>
+                      setVariants(
+                        variants.map((item) =>
+                          item.id === variant.id ? { ...item, color: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  />
+                  <input
+                    aria-label="Size"
+                    placeholder="Size"
+                    required
+                    maxLength={40}
+                    className="field text-xs"
+                    value={variant.size}
+                    onChange={(event) =>
+                      setVariants(
+                        variants.map((item) =>
+                          item.id === variant.id ? { ...item, size: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  />
+                  <input
+                    aria-label={`Giá niêm yết ${variant.sku || variant.color}`}
+                    min={1000} step={1} type="number" required
+                    className="field text-xs" value={variant.price}
+                    onChange={(event) => updateVariant(variant.id, { price: Number(event.target.value) })}
+                  />
+                  <input
+                    aria-label="Tồn kho"
+                    min={0}
+                    step={1}
+                    type="number"
+                    className="field text-xs"
+                    value={variant.stockQuantity}
+                    onChange={(event) =>
+                      setVariants(
+                        variants.map((item) =>
+                          item.id === variant.id
+                            ? { ...item, stockQuantity: Number(event.target.value) }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+                  <div className="space-y-2 min-w-0">
+                    <div className="flex flex-wrap gap-1.5">
+                      {(variant.images ?? []).map((image) => <div key={image.id} className="w-12">
+                        <img src={image.url} alt={image.alt} className="w-12 h-12 object-cover border" />
+                        <label className="text-[10px] flex gap-0.5 items-center">
+                          <input type="radio" name={`primary-${variant.id}`} checked={image.isPrimary}
+                            onChange={() => updateVariant(variant.id, {
+                              images: variant.images?.map((item) => ({ ...item, isPrimary: item.id === image.id })),
+                            })} />Chính
+                        </label>
+                        <button type="button" className="text-[10px] text-red-600" onClick={() => {
+                          const remaining = (variant.images ?? []).filter((item) => item.id !== image.id);
+                          if (image.isPrimary && remaining.length) remaining[0] = { ...remaining[0], isPrimary: true };
+                          updateVariant(variant.id, { images: remaining });
+                        }}>Xóa</button>
+                      </div>)}
+                    </div>
+                    <select aria-label={`Dùng ảnh sản phẩm cho ${variant.sku || variant.color}`}
+                      className="field text-xs py-1" value="" onChange={(event) => {
+                        const image = images.find((item) => item.url === event.target.value);
+                        if (!image || variant.images?.some((item) => item.url === image.url)) return;
+                        if ((variant.images?.length ?? 0) >= 8) { setError('Mỗi biến thể có tối đa 8 ảnh.'); return; }
+                        updateVariant(variant.id, { images: [...(variant.images ?? []), {
+                          ...image, id: crypto.randomUUID(), isPrimary: !variant.images?.length,
+                        }] });
+                      }}>
+                      <option value="">+ Chọn ảnh chung</option>
+                      {images.map((image, index) => <option key={image.id} value={image.url}>Ảnh {index + 1}</option>)}
+                    </select>
+                    <label className="btn-outline inline-block py-1 px-2 text-[11px] cursor-pointer">
+                      + Tải ảnh riêng
+                      <input type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden"
+                        disabled={uploading} onChange={(event) => {
+                          void addVariantImages(variant.id, event.target.files);
+                          event.target.value = '';
+                        }} />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={variants.length === 1}
+                    onClick={() => setVariants(variants.filter((item) => item.id !== variant.id))}
+                    className="text-red-600 text-xs hover:underline disabled:opacity-30"
+                  >
+                    Xóa
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
         </div>
-        {error && <p className="field-error">{error}</p>}
+        {error && <p className="field-error" role="alert">{error}</p>}
         <div className="flex gap-3">
-          <button className="btn-primary">Lưu sản phẩm</button>
-          <Link to="/admin/products" className="btn-outline">
-            Hủy
-          </Link>
+          <button className="btn-primary" disabled={uploading}>Lưu sản phẩm</button>
+          {onClose ? <button type="button" onClick={onClose} className="btn-outline">Hủy</button>
+            : <Link to="/admin/products" className="btn-outline">Hủy</Link>}
         </div>
-      </form>
+      </form>}
     </>
   );
+}
+const emptyBanner = (): HomeBanner => ({
+  id: '', title: '', subtitle: '', imageUrl: '', linkUrl: '/products',
+  buttonLabel: 'Khám phá', sortOrder: 0, isActive: true,
+});
+export function AdminBanners() {
+  const client = useQueryClient();
+  const { data: banners = [], isLoading, error: loadError } = useQuery({
+    queryKey: ['admin-banners'], queryFn: bannerService.listAdmin,
+  });
+  const [editing, setEditing] = useState<HomeBanner | null>(null);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editing) return;
+    if (editing.title.trim().length < 2 || editing.title.length > 150
+      || !editing.imageUrl || editing.subtitle.length > 400
+      || !editing.linkUrl.startsWith('/') || editing.linkUrl.startsWith('//')
+      || !editing.buttonLabel.trim() || editing.buttonLabel.length > 60
+      || !Number.isSafeInteger(editing.sortOrder) || editing.sortOrder < 0) {
+      setError('Kiểm tra tiêu đề, ảnh, liên kết, nút và thứ tự hiển thị.'); return;
+    }
+    setSaving(true); setError('');
+    try {
+      await bannerService.save(editing);
+      await client.invalidateQueries({ queryKey: ['admin-banners'] });
+      await client.invalidateQueries({ queryKey: ['banners'] });
+      setEditing(null);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Không lưu được banner.'); }
+    finally { setSaving(false); }
+  };
+  const remove = async (id: string) => {
+    if (!window.confirm('Xóa banner này?')) return;
+    try {
+      await bannerService.remove(id);
+      await client.invalidateQueries({ queryKey: ['admin-banners'] });
+      await client.invalidateQueries({ queryKey: ['banners'] });
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Không xóa được banner.'); }
+  };
+  return <>
+    <PageHeading eyebrow="TRANG CHỦ" title="Quản lý banner" action={<button className="btn-primary" onClick={() => { setEditing(emptyBanner()); setError(''); }}>+ Thêm banner</button>} />
+    {loadError && <ErrorState error={new Error('Không tải được banner.')} />}
+    {isLoading && <p>Đang tải banner...</p>}
+    {error && <p className="field-error mb-4" role="alert">{error}</p>}
+    <div className="grid md:grid-cols-2 gap-4">
+      {banners.map((banner) => <div key={banner.id} className="panel space-y-3">
+        <img src={banner.imageUrl} alt="" className="w-full aspect-[16/7] rounded object-cover" />
+        <div className="flex justify-between gap-2"><div><strong>{banner.title}</strong><p className="text-sm text-slate-500">Thứ tự {banner.sortOrder} · {banner.isActive ? 'Đang hiển thị' : 'Đang ẩn'}</p></div>
+          <div className="flex gap-3"><button className="text-brand" onClick={() => { setEditing(banner); setError(''); }}>Sửa</button><button className="text-red-600" onClick={() => void remove(banner.id)}>Xóa</button></div>
+        </div>
+      </div>)}
+    </div>
+    {editing && <div className="fixed inset-0 z-50 bg-black/50 overflow-y-auto p-4 flex items-start justify-center">
+      <form className="panel w-full max-w-xl my-8 space-y-4" onSubmit={(event) => void save(event)}>
+        <h2 className="text-xl font-bold">{editing.id ? 'Sửa banner' : 'Thêm banner'}</h2>
+        <label className="form-label">Tiêu đề<input required minLength={2} maxLength={150} className="field" value={editing.title} onChange={(event) => setEditing({ ...editing, title: event.target.value })} /></label>
+        <label className="form-label">Mô tả<input maxLength={400} className="field" value={editing.subtitle} onChange={(event) => setEditing({ ...editing, subtitle: event.target.value })} /></label>
+        <label className="form-label">Ảnh banner (JPG, PNG, WebP; tối đa 5 MB)<input type="file" accept="image/jpeg,image/png,image/webp" className="field" disabled={uploading} onChange={async (event) => {
+          const file = event.target.files?.[0]; if (!file) return;
+          setUploading(true); setError('');
+          try { const url = await uploadImage(file); setEditing((current) => current ? { ...current, imageUrl: url } : current); }
+          catch (caught) { setError(caught instanceof Error ? caught.message : 'Không tải được ảnh.'); }
+          finally { setUploading(false); }
+        }} /></label>
+        {editing.imageUrl && <img src={editing.imageUrl} alt="Xem trước banner" className="w-full aspect-[16/7] object-cover rounded" />}
+        <label className="form-label">Liên kết khi bấm banner<input required maxLength={500} pattern="/(?!/).*" className="field" value={editing.linkUrl} onChange={(event) => setEditing({ ...editing, linkUrl: event.target.value })} /></label>
+        <label className="form-label">Chữ trên nút<input required maxLength={60} className="field" value={editing.buttonLabel} onChange={(event) => setEditing({ ...editing, buttonLabel: event.target.value })} /></label>
+        <label className="form-label">Thứ tự hiển thị<input required type="number" min={0} step={1} className="field" value={editing.sortOrder} onChange={(event) => setEditing({ ...editing, sortOrder: Number(event.target.value) })} /></label>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={editing.isActive} onChange={(event) => setEditing({ ...editing, isActive: event.target.checked })} />Hiển thị trên trang chủ</label>
+        <div className="flex gap-3"><button className="btn-primary" disabled={saving || uploading}>{saving ? 'Đang lưu...' : 'Lưu banner'}</button><button type="button" className="btn-outline" onClick={() => setEditing(null)}>Hủy</button></div>
+      </form>
+    </div>}
+  </>;
 }
 export function AdminInventory() {
   const client = useQueryClient();
   const [search, setSearch] = useState('');
-  const { data: products = [] } = useQuery({
-    queryKey: ['admin-products'],
-    queryFn: () => Promise.resolve(getMockProducts()),
+  const { data: entries = [] } = useQuery({
+    queryKey: ['admin-inventory'],
+    queryFn: async () => {
+      if (!useDbCatalog) return getMockProducts().flatMap((product) =>
+        product.variants.map((variant) => ({ product: { ...product, imageUrl: product.images.find((image) => image.isPrimary)?.url ?? product.images[0]?.url }, variant })));
+      const { data } = await httpClient.get<{ data: Array<{
+        id: string; name: string; sku: string; color: string; size: string;
+        stockQuantity: number; reservedQuantity: number; imageUrl: string | null;
+      }> }>('/admin/inventory');
+      return data.data.map((row) => ({ product: { name: row.name, imageUrl: row.imageUrl }, variant: row }));
+    },
   });
-  const entries = products
-    .flatMap((product) => product.variants.map((variant) => ({ product, variant })))
+  const filteredEntries = entries
     .filter(({ product, variant }) =>
       `${product.name} ${variant.sku}`.toLowerCase().includes(search.toLowerCase()),
     );
-  const adjust = ({ product, variant }: (typeof entries)[number]) => {
+  const adjust = async ({ product, variant }: {
+    product: { id?: string; name: string };
+    variant: { id: string; sku: string; stockQuantity: number };
+  }) => {
     const input = window.prompt(`Số lượng mới cho ${variant.sku}`, String(variant.stockQuantity));
     if (input === null) return;
     const value = Number(input);
     if (!Number.isInteger(value) || value < 0) return window.alert('Nhập số nguyên không âm.');
+    if (useDbCatalog) {
+      try {
+        await httpClient.patch(`/admin/inventory/${variant.id}`, { stockQuantity: value });
+        await client.invalidateQueries({ queryKey: ['admin-inventory'] });
+        await client.invalidateQueries({ queryKey: ['admin-products'] });
+      } catch (caught) { window.alert(caught instanceof Error ? caught.message : 'Không cập nhật được tồn kho.'); }
+      return;
+    }
     const updated = getMockProducts().map((item) =>
-      item.id === product.id
+      item.id === ('id' in product ? product.id : '')
         ? {
             ...item,
             variants: item.variants.map((entry) =>
@@ -547,22 +945,12 @@ export function AdminInventory() {
     saveMockProducts(updated);
     void client.invalidateQueries();
   };
-  if (!mockMode)
-    return (
-      <>
-        <PageHeading title="Quản lý tồn kho" eyebrow="STOCK CONTROL" />
-        <EmptyState
-          title="Chưa tích hợp API tồn kho"
-          description="Cần endpoint đọc và điều chỉnh SKU từ Backend."
-        />
-      </>
-    );
   return (
     <>
       <PageHeading
         eyebrow="STOCK CONTROL"
         title="Quản lý tồn kho"
-        description="Điều chỉnh số lượng từng SKU trong chế độ demo."
+        description="Theo dõi và điều chỉnh số lượng còn lại của từng sản phẩm."
       />
       <div className="panel">
         <input
@@ -576,6 +964,7 @@ export function AdminInventory() {
           <table className="data-table">
             <thead>
               <tr>
+                <th>Ảnh</th>
                 <th>SKU</th>
                 <th>Sản phẩm</th>
                 <th>Màu / Size</th>
@@ -584,8 +973,10 @@ export function AdminInventory() {
               </tr>
             </thead>
             <tbody>
-              {entries.map(({ product, variant }) => (
+              {filteredEntries.map(({ product, variant }) => (
                 <tr key={variant.id}>
+                  <td><img src={product.imageUrl || '/images/product-placeholder.svg'} alt={product.name}
+                    onError={showProductPlaceholder} className="w-12 h-14 object-cover rounded border" /></td>
                   <td>{variant.sku}</td>
                   <td>{product.name}</td>
                   <td>
@@ -597,7 +988,7 @@ export function AdminInventory() {
                     </Badge>
                   </td>
                   <td>
-                    <button className="text-brand" onClick={() => adjust({ product, variant })}>
+                    <button className="text-brand" onClick={() => void adjust({ product, variant })}>
                       Điều chỉnh
                     </button>
                   </td>
@@ -611,11 +1002,15 @@ export function AdminInventory() {
   );
 }
 export function AdminOrders() {
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
-  const { data: orders = [], error } = useQuery({
+  const { data: orders = [], error, refetch, isFetching } = useQuery({
     queryKey: ['admin-orders'],
     queryFn: () => orderService.list(),
+    refetchInterval: 15000,
+    refetchOnWindowFocus: 'always',
   });
   const filtered = orders.filter(
     (item) =>
@@ -626,33 +1021,45 @@ export function AdminOrders() {
     <>
       <PageHeading eyebrow="ORDER MANAGEMENT" title="Quản lý đơn hàng" />
       <div className="panel">
-        <div className="flex flex-wrap gap-3 mb-5">
-          <input
-            aria-label="Tìm mã đơn"
-            className="field max-w-xs"
-            placeholder="Tìm mã đơn hàng"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          <select
-            className="field w-48"
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              aria-label="Tìm mã đơn"
+              className="field max-w-xs"
+              placeholder="Tìm mã đơn hàng"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <select
+              className="field w-48"
+              value={status}
+              onChange={(event) => setStatus(event.target.value)}
+            >
+              <option value="">Tất cả trạng thái</option>
+              {(
+                [
+                  'PENDING',
+                  'CONFIRMED',
+                  'PROCESSING',
+                  'SHIPPING',
+                  'DELIVERED',
+                  'CANCELLED',
+                ] as OrderStatus[]
+              ).map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+            className="btn-outline flex items-center gap-1.5 text-sm py-2 px-3"
+            title="Làm mới danh sách đơn hàng"
           >
-            <option value="">Tất cả trạng thái</option>
-            {(
-              [
-                'PENDING',
-                'CONFIRMED',
-                'PROCESSING',
-                'SHIPPING',
-                'DELIVERED',
-                'CANCELLED',
-              ] as OrderStatus[]
-            ).map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
+            <RefreshCw size={15} className={isFetching ? 'animate-spin' : ''} />
+            <span>Làm mới</span>
+          </button>
         </div>
         {error ? (
           <ErrorState error={error} />
@@ -665,7 +1072,7 @@ export function AdminOrders() {
                   <th>Ngày tạo</th>
                   <th>Trạng thái</th>
                   <th>Tổng tiền</th>
-                  <th></th>
+                  <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -688,9 +1095,22 @@ export function AdminOrders() {
                     </td>
                     <td>{formatCurrency(item.totalAmount)}</td>
                     <td>
-                      <Link className="text-brand" to={`/admin/orders/${item.id}`}>
-                        Chi tiết
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="text-brand font-medium hover:underline text-sm"
+                          onClick={() => setSelectedOrderId(item.id)}
+                        >
+                          Chi tiết
+                        </button>
+                        <button
+                          className="text-slate-600 hover:text-ink flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 hover:border-slate-400 bg-white"
+                          onClick={() => setInvoiceOrder(item)}
+                          title="In hóa đơn & Phiếu đóng gói"
+                        >
+                          <Printer size={13} />
+                          <span>In đơn</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -701,16 +1121,29 @@ export function AdminOrders() {
           <EmptyState />
         )}
       </div>
+      {selectedOrderId && <AdminModal title="Chi tiết đơn hàng" onClose={() => setSelectedOrderId(null)}>
+        <AdminOrderDetail orderIdOverride={selectedOrderId} onClose={() => setSelectedOrderId(null)} />
+      </AdminModal>}
+      {invoiceOrder && (
+        <OrderInvoiceModal
+          order={invoiceOrder}
+          onClose={() => setInvoiceOrder(null)}
+        />
+      )}
     </>
   );
 }
-export function AdminOrderDetail() {
-  const { orderId } = useParams();
+export function AdminOrderDetail({ orderIdOverride, onClose }: { orderIdOverride?: string; onClose?: () => void } = {}) {
+  const { orderId: routeId } = useParams();
+  const orderId = orderIdOverride ?? routeId;
+  const [showInvoice, setShowInvoice] = useState(false);
   const client = useQueryClient();
-  const { data: order, error } = useQuery({
+  const { data: order, error, isFetching, refetch } = useQuery({
     queryKey: ['order', orderId],
     queryFn: () => orderService.byId(orderId!),
     enabled: !!orderId,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: 'always',
   });
   const mutation = useMutation({
     mutationFn: (status: OrderStatus) => orderService.updateStatus(orderId!, status),
@@ -732,40 +1165,135 @@ export function AdminOrderDetail() {
         title={`Đơn hàng ${order.orderCode}`}
         eyebrow="ORDER DETAIL"
         action={
-          <Link to="/admin/orders" className="btn-outline">
-            ← Danh sách
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              disabled={isFetching}
+              className="btn-outline flex items-center justify-center gap-1.5 text-xs py-2 px-3 min-w-[96px]"
+              title="Đồng bộ lại đơn hàng"
+            >
+              <RefreshCw size={13} className={isFetching ? 'animate-spin text-brand' : ''} />
+              <span>{isFetching ? 'Đang đồng bộ...' : 'Đồng bộ'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowInvoice(true)}
+              className="btn-primary bg-ink text-white hover:bg-black flex items-center gap-2 text-sm py-2 px-3.5 shadow-sm"
+              title="Xem và in hóa đơn & phiếu đóng gói (PDF)"
+            >
+              <Printer size={15} />
+              <span>In hóa đơn</span>
+            </button>
+            {onClose ? (
+              <button type="button" onClick={onClose} className="btn-outline">
+                Đóng
+              </button>
+            ) : (
+              <Link to="/admin/orders" className="btn-outline">
+                ← Danh sách
+              </Link>
+            )}
+          </div>
         }
       />
       <div className="grid lg:grid-cols-[1fr_300px] gap-5">
         <div className="panel">
           <h2 className="font-bold mb-4">Sản phẩm</h2>
-          {order.items.map((item) => (
-            <div key={item.id} className="flex gap-4 py-3 border-b">
-              <img src={item.imageUrl} alt="" className="w-16 h-20 object-cover" />
-              <div className="flex-1">
-                <strong>{item.productName}</strong>
-                <p className="text-sm text-slate-500">
-                  {item.sku} · {item.color}/{item.size} × {item.quantity}
-                </p>
+          {order.items.map((item) => {
+            const productUrl = `/products/${(item as any).productSlug || item.productId}`;
+            return (
+              <div key={item.id} className="flex gap-4 py-3 border-b">
+                <Link
+                  to={productUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 hover:opacity-80 transition-opacity"
+                  title={`Xem ${item.productName} trên website`}
+                >
+                  <img
+                    src={getCardImageUrl(item.imageUrl)}
+                    alt={item.productName}
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      if (item.imageUrl && target.src !== item.imageUrl) {
+                        target.src = item.imageUrl;
+                      } else {
+                        showProductPlaceholder(e);
+                      }
+                    }}
+                    className="w-16 h-20 object-cover rounded"
+                  />
+                </Link>
+                <div className="flex-1 min-w-0">
+                  <Link
+                    to={productUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:text-brand hover:underline font-bold text-ink inline-block"
+                    title={`Xem ${item.productName} trên website`}
+                  >
+                    <strong>{item.productName}</strong>
+                  </Link>
+                  <p className="text-sm text-slate-500">
+                    {item.sku} · {item.color}/{item.size} × {item.quantity}
+                  </p>
+                </div>
+                <span className="shrink-0 font-medium">{formatCurrency(item.lineTotal)}</span>
               </div>
-              <span>{formatCurrency(item.lineTotal)}</span>
+            );
+          })}
+          <div className="mt-5 pt-3 border-t border-slate-100 space-y-1.5 text-sm">
+            <div className="flex justify-between text-slate-600">
+              <span>Tạm tính:</span>
+              <span>{formatCurrency(order.subtotal)}</span>
             </div>
-          ))}
-          <div className="text-right font-bold mt-5">
-            Tổng: <span className="text-brand">{formatCurrency(order.totalAmount)}</span>
+            <div className="flex justify-between text-slate-600">
+              <span>Phí vận chuyển:</span>
+              <span>{order.shippingFee === 0 ? 'Miễn phí' : formatCurrency(order.shippingFee)}</span>
+            </div>
+            {order.discountAmount > 0 && (
+              <div className="flex justify-between text-emerald-600">
+                <span>Giảm giá:</span>
+                <span>-{formatCurrency(order.discountAmount)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center font-bold text-base pt-2 border-t">
+              <span>Tổng thanh toán:</span>
+              <span className="text-brand text-lg">{formatCurrency(order.totalAmount)}</span>
+            </div>
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between text-sm">
+            <span className="text-slate-500">Phương thức thanh toán:</span>
+            <span className="font-semibold">{order.paymentMethod === 'COD' ? 'Thanh toán khi nhận hàng (COD)' : order.paymentMethod}</span>
           </div>
           <h3 className="font-bold mt-7 mb-2">Địa chỉ nhận hàng</h3>
           <p className="text-sm">
             {order.shippingAddress.recipientName} · {order.shippingAddress.phone}
             <br />
             {order.shippingAddress.detail}, {order.shippingAddress.ward},{' '}
-            {order.shippingAddress.district}, {order.shippingAddress.province}
+            {order.shippingAddress.district ? `${order.shippingAddress.district}, ` : ''}{order.shippingAddress.province}
           </p>
+          {order.note && (
+            <div className="mt-4 p-3 bg-amber-50/70 border border-amber-200 rounded text-sm text-amber-900">
+              <strong className="block text-xs uppercase tracking-wider text-amber-800 mb-1">Ghi chú của khách:</strong>
+              {order.note}
+            </div>
+          )}
         </div>
         <aside className="panel h-fit">
           <h2 className="font-bold mb-3">Trạng thái</h2>
-          <Badge tone="warning">{formatOrderStatus(order.status)}</Badge>
+          <Badge
+            tone={
+              order.status === 'CANCELLED'
+                ? 'danger'
+                : order.status === 'DELIVERED'
+                  ? 'success'
+                  : 'warning'
+            }
+          >
+            {formatOrderStatus(order.status)}
+          </Badge>
           <div className="flex flex-wrap gap-2 mt-5">
             {transitions[order.status].map((status) => (
               <button
@@ -782,146 +1310,20 @@ export function AdminOrderDetail() {
             ))}
           </div>
           {mutation.error && <p className="field-error mt-3">{mutation.error.message}</p>}
-          <h3 className="font-bold mt-7 mb-3">Lịch sử</h3>
-          {order.history.map((item) => (
-            <p
-              key={`${item.status}-${item.at}`}
-              className="text-xs border-l-2 border-brand pl-3 py-2"
-            >
-              {formatOrderStatus(item.status)}
-              <br />
-              {formatDate(item.at)}
-            </p>
-          ))}
+          <h3 className="font-bold mt-7 mb-3">Lịch sử xử lý</h3>
+          <OrderTimeline history={order.history} />
         </aside>
       </div>
-    </>
-  );
-}
-export function AdminKnowledge() {
-  const client = useQueryClient();
-  const { data: docs = [] } = useQuery({
-    queryKey: ['knowledge'],
-    queryFn: () => knowledgeService.list(),
-  });
-  const [editing, setEditing] = useState<KnowledgeDocument | null>(null);
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [error, setError] = useState('');
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (title.length < 3 || content.length < 10) {
-      setError('Tiêu đề và nội dung quá ngắn.');
-      return;
-    }
-    try {
-      await knowledgeService.save({
-        id: editing?.id ?? crypto.randomUUID(),
-        title,
-        content,
-        status: 'INDEXED',
-        updatedAt: new Date().toISOString(),
-      });
-      await client.invalidateQueries({ queryKey: ['knowledge'] });
-      setOpen(false);
-      setError('');
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Không thể lưu.');
-    }
-  };
-  return (
-    <>
-      <PageHeading
-        eyebrow="AI / RAG"
-        title="Kho tri thức"
-        description="Tài liệu mock được chatbot dùng để trả lời câu hỏi cơ bản."
-        action={
-          <button
-            className="btn-primary"
-            onClick={() => {
-              setEditing(null);
-              setTitle('');
-              setContent('');
-              setOpen(true);
-            }}
-          >
-            + Thêm tài liệu
-          </button>
-        }
-      />
-      <div className="grid md:grid-cols-2 gap-4">
-        {docs.map((doc) => (
-          <article key={doc.id} className="panel">
-            <div className="flex justify-between gap-3">
-              <h2 className="font-bold">{doc.title}</h2>
-              <Badge tone="success">{doc.status}</Badge>
-            </div>
-            <p className="text-sm text-slate-600 my-3 line-clamp-3">{doc.content}</p>
-            <p className="text-xs text-slate-400 mb-4">Cập nhật {formatDate(doc.updatedAt)}</p>
-            <div className="flex gap-4 text-sm">
-              <button
-                className="text-brand"
-                onClick={() => {
-                  setEditing(doc);
-                  setTitle(doc.title);
-                  setContent(doc.content);
-                  setOpen(true);
-                }}
-              >
-                Chỉnh sửa
-              </button>
-              <button
-                className="text-red-600"
-                onClick={async () => {
-                  if (window.confirm('Xóa tài liệu này?')) {
-                    await knowledgeService.remove(doc.id);
-                    await client.invalidateQueries({ queryKey: ['knowledge'] });
-                  }
-                }}
-              >
-                Xóa
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
-      {open && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <form
-            onSubmit={(event) => void save(event)}
-            className="bg-white p-6 rounded w-full max-w-xl"
-          >
-            <h2 className="font-bold text-xl mb-5">{editing ? 'Sửa tài liệu' : 'Thêm tài liệu'}</h2>
-            <label className="form-label">
-              Tiêu đề
-              <input
-                className="field"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-              />
-            </label>
-            <label className="form-label mt-4">
-              Nội dung
-              <textarea
-                className="field min-h-40"
-                value={content}
-                onChange={(event) => setContent(event.target.value)}
-              />
-            </label>
-            {error && <p className="field-error">{error}</p>}
-            <div className="flex justify-end gap-2 mt-5">
-              <button type="button" className="btn-outline" onClick={() => setOpen(false)}>
-                Hủy
-              </button>
-              <button className="btn-primary">Lưu</button>
-            </div>
-          </form>
-        </div>
+      {showInvoice && (
+        <OrderInvoiceModal
+          order={order}
+          onClose={() => setShowInvoice(false)}
+        />
       )}
     </>
   );
 }
+export { AdminKnowledgeManager as AdminKnowledge } from './AdminKnowledgeManager';
 export function AdminReports() {
   const { data: orders = [] } = useQuery({
     queryKey: ['admin-orders'],
@@ -940,7 +1342,7 @@ export function AdminReports() {
       <PageHeading
         title="Báo cáo thống kê"
         eyebrow="REPORTS"
-        description="Số liệu từ đơn hàng demo; chưa kết nối hệ thống phân tích Backend."
+        description="Tổng hợp tình hình đơn hàng và doanh thu."
       />
       <div className="grid md:grid-cols-2 gap-5">
         <div className="panel">
@@ -982,10 +1384,10 @@ export function AdminUsers() {
       <PageHeading
         title="Người dùng"
         eyebrow="ADMIN"
-        description="Danh sách tài khoản mẫu. Quản trị tài khoản cần API Backend."
+        description="Xem các tài khoản trong cửa hàng."
       />
       {!mockMode ? (
-        <EmptyState title="Chưa tích hợp API người dùng" />
+        <EmptyState title="Danh sách tài khoản chưa sẵn sàng" />
       ) : (
         <div className="panel">
           <table className="data-table">
@@ -1021,19 +1423,19 @@ export function AdminConversations() {
     <>
       <PageHeading
         title="Hội thoại AI"
-        eyebrow="AI / RAG"
+        eyebrow="TRỢ LÝ MUA SẮM"
         description={
           mockMode
             ? 'Lịch sử hội thoại phát sinh trong trình duyệt này.'
-            : 'Chưa tích hợp API hội thoại và quyền truy cập Backend.'
+            : 'Hội thoại hiện chưa sẵn sàng.'
         }
       />
       {!mockMode ? (
-        <EmptyState title="Chưa tích hợp Backend" />
+        <EmptyState title="Hội thoại hiện chưa sẵn sàng" />
       ) : !ids.length ? (
         <EmptyState
           title="Chưa có hội thoại"
-          description="Hãy thử đặt câu hỏi trong chatbot để tạo dữ liệu demo."
+          description="Hãy thử đặt câu hỏi cho trợ lý mua sắm để bắt đầu hội thoại."
         />
       ) : (
         <div className="grid md:grid-cols-[240px_1fr] gap-5">
@@ -1069,14 +1471,19 @@ export function AdminConversations() {
 export function AdminCategories() {
   const client = useQueryClient();
   const { data: categories = [], error } = useQuery({
-    queryKey: ['categories'],
-    queryFn: categoryService.list,
+    queryKey: ['admin-categories'],
+    queryFn: categoryService.listAdmin,
+  });
+  const { data: products = [] } = useQuery({
+    queryKey: ['admin-products'],
+    queryFn: productService.listAdmin,
   });
   const [editing, setEditing] = useState<Category | null>(null);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
+  const [parentId, setParentId] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [message, setMessage] = useState('');
   const start = (item?: Category) => {
@@ -1084,48 +1491,106 @@ export function AdminCategories() {
     setName(item?.name ?? '');
     setSlug(item?.slug ?? '');
     setDescription(item?.description ?? '');
+    setParentId(item?.parentId ?? '');
     setIsActive(item?.isActive ?? true);
     setMessage('');
     setOpen(true);
   };
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (name.trim().length < 2 || name.length > 150
+      || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 180
+      || description.length > 5000 || (parentId && !categories.some((item) => item.id === parentId))) {
+      setMessage('Kiểm tra tên, đường dẫn, mô tả và danh mục cha.'); return;
+    }
     if (categories.some((item) => item.slug === slug && item.id !== editing?.id)) {
       setMessage('Slug đã tồn tại.');
       return;
     }
     try {
       await categoryService.save({
-        id: editing?.id ?? crypto.randomUUID(),
+        id: editing?.id ?? (useDbCatalog ? '' : crypto.randomUUID()),
         name,
         slug,
         description,
+        parentId: parentId || null,
         isActive,
       });
       await client.invalidateQueries({ queryKey: ['categories'] });
+      await client.invalidateQueries({ queryKey: ['admin-categories'] });
       setOpen(false);
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : 'Không thể lưu danh mục.');
     }
   };
+  const descendants = (id: string): Set<string> => {
+    const found = new Set([id]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const item of categories) {
+        if (item.parentId && found.has(item.parentId) && !found.has(item.id)) {
+          found.add(item.id);
+          changed = true;
+        }
+      }
+    }
+    return found;
+  };
+  const depth = (item: Category): number => {
+    let level = 0;
+    let parent = item.parentId;
+    const seen = new Set([item.id]);
+    while (parent && !seen.has(parent)) {
+      seen.add(parent);
+      level += 1;
+      parent = categories.find((candidate) => candidate.id === parent)?.parentId;
+    }
+    return level;
+  };
+  const orderedCategories: Category[] = [];
+  const visit = (parent: string | null) => {
+    categories.filter((item) => (item.parentId ?? null) === parent)
+      .sort((a, b) => a.name.localeCompare(b.name, 'vi'))
+      .forEach((item) => { orderedCategories.push(item); visit(item.id); });
+  };
+  visit(null);
+
+  const categoryProductCountMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const cat of categories) {
+      const targetIds = descendants(cat.id);
+      const count = products.filter((p) => targetIds.has(p.categoryId)).length;
+      map.set(cat.id, count);
+    }
+    return map;
+  }, [categories, products]);
   return (
     <>
       <PageHeading
         eyebrow="CATALOG"
         title="Quản lý danh mục"
         description="Danh mục được dùng chung với bộ lọc và điều hướng cửa hàng."
-        action={
-          mockMode && (
-            <button className="btn-primary" onClick={() => start()}>
-              + Thêm danh mục
-            </button>
-          )
-        }
+        action={<button className="btn-primary" onClick={() => start()}>+ Thêm danh mục</button>}
       />
+
+      {/* Navigation Switcher Tabs */}
+      <div className="flex items-center gap-2 mb-6 border-b border-slate-200">
+        <Link
+          to="/admin/home-categories"
+          className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-ink transition-colors flex items-center gap-2"
+        >
+          <Layers size={15} /> Danh mục hiển thị Trang chủ
+        </Link>
+        <Link
+          to="/admin/categories"
+          className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-brand border-b-2 border-brand flex items-center gap-2"
+        >
+          <Grid size={15} /> Cây danh mục hệ thống
+        </Link>
+      </div>
       {error ? (
         <ErrorState error={error} />
-      ) : !mockMode ? (
-        <EmptyState title="Chưa tích hợp API quản lý danh mục" />
       ) : (
         <div className="panel overflow-x-auto">
           <table className="data-table">
@@ -1139,9 +1604,11 @@ export function AdminCategories() {
               </tr>
             </thead>
             <tbody>
-              {categories.map((item) => (
+              {orderedCategories.map((item) => (
                 <tr key={item.id}>
-                  <td className="font-medium">{item.name}</td>
+                  <td className="font-medium" style={{ paddingLeft: `${12 + depth(item) * 24}px` }}>
+                    {depth(item) > 0 ? '↳ ' : ''}{item.name}
+                  </td>
                   <td>{item.slug}</td>
                   <td>
                     <Badge tone={item.isActive ? 'success' : 'neutral'}>
@@ -1149,7 +1616,9 @@ export function AdminCategories() {
                     </Badge>
                   </td>
                   <td>
-                    {getMockProducts().filter((product) => product.categoryId === item.id).length}
+                    <span className="font-semibold text-ink">
+                      {categoryProductCountMap.get(item.id) ?? 0}
+                    </span>
                   </td>
                   <td>
                     <div className="flex gap-3">
@@ -1163,6 +1632,7 @@ export function AdminCategories() {
                           try {
                             await categoryService.remove(item.id);
                             await client.invalidateQueries({ queryKey: ['categories'] });
+                            await client.invalidateQueries({ queryKey: ['admin-categories'] });
                           } catch (caught) {
                             window.alert(
                               caught instanceof Error ? caught.message : 'Không thể xóa.',
@@ -1192,6 +1662,7 @@ export function AdminCategories() {
               <input
                 required
                 minLength={2}
+                maxLength={150}
                 className="field"
                 value={name}
                 onChange={(event) => {
@@ -1213,16 +1684,28 @@ export function AdminCategories() {
               Slug
               <input
                 required
-                pattern="[a-z0-9-]+"
+                maxLength={180}
+                pattern="[a-z0-9]+(-[a-z0-9]+)*"
                 className="field"
                 value={slug}
                 onChange={(event) => setSlug(event.target.value)}
               />
             </label>
             <label className="form-label">
+              Danh mục cha
+              <select className="field" value={parentId} onChange={(event) => setParentId(event.target.value)}>
+                <option value="">Không có (danh mục gốc)</option>
+                {orderedCategories.filter((item) => !editing || !descendants(editing.id).has(item.id))
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>{'— '.repeat(depth(item))}{item.name}</option>
+                  ))}
+              </select>
+            </label>
+            <label className="form-label">
               Mô tả
               <textarea
                 className="field"
+                maxLength={5000}
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
               />

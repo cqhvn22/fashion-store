@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package fashion.inventory.v1;
+option java_package = "com.fashion.inventory.grpc";
+option java_multiple_files = true;
+
+service InventoryService {
+  rpc Reserve(ReserveRequest) returns (ReserveResponse);
+  rpc Commit(CheckoutRequest) returns (CheckoutResponse);
+  rpc Release(CheckoutRequest) returns (CheckoutResponse);
+}
+
+message ReservationItem {
+  string variant_id = 1;
+  int32 quantity = 2;
+}
+
+message ReserveRequest {
+  string checkout_id = 1;
+  repeated ReservationItem items = 2;
+  int64 expires_at_epoch_millis = 3;
+}
+
+message ItemSnapshot {
+  string variant_id = 1;
+  string product_id = 2;
+  string product_name = 3;
+  string product_slug = 4;
+  string sku = 5;
+  string size = 6;
+  string color = 7;
+  string image_url = 8;
+  int64 price = 9;
+  int32 quantity = 10;
+}
+
+message ReserveResponse {
+  repeated ItemSnapshot snapshots = 1;
+}
+
+message CheckoutRequest {
+  string checkout_id = 1;
+}
+
+message CheckoutResponse {
+  string checkout_id = 1;
+  string status = 2;
+}

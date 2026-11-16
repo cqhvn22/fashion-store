@@ -1,12 +1,14 @@
 # Mô tả hệ thống FashionHub và thiết kế CSDL theo service
 
-> **Trạng thái tài liệu:** đặc tả triển khai đề xuất, dựa trên giao diện React hiện có, dữ liệu mẫu, hợp đồng API dự kiến và khung microservices trong repository. Đây không phải mô tả một backend đã hoàn thành. Ngày lập: 08/11/2026.
+> **Trạng thái tài liệu:** đặc tả ban đầu lập ngày 08/11/2026. Backend MVP đã được triển khai ngày 09/11/2026; bảng SQL bên dưới là cơ sở cho Flyway migrations trong từng service. Một số ghi chú về frontend trong tài liệu vẫn mô tả giao diện mock hiện tại. Cách chạy và giới hạn tích hợp xem README.
 
 ## 1. Mục tiêu và phạm vi
 
 FashionHub là website bán thời trang cho khách truy cập, khách hàng và quản trị viên. Khách hàng tìm sản phẩm theo danh mục, bộ lọc và tìm kiếm; chọn biến thể màu/size, đặt hàng COD hoặc thanh toán trực tuyến qua PayOS, theo dõi đơn và nhận tư vấn từ chatbot. Quản trị viên quản lý danh mục, sản phẩm, tồn kho, đơn hàng, kho tri thức và báo cáo.
 
-Phạm vi bản MVP được rút từ các route tại frontend/src/app/App.tsx, các model tại frontend/src/types/models.ts và yêu cầu tại frontend/implement.md, đồng thời bổ sung PayOS theo yêu cầu mới. Thanh toán PayOS là **phần cần triển khai**, chưa có trên giao diện và backend hiện tại. Đánh giá sản phẩm, khuyến mãi và gửi email khôi phục mật khẩu chưa nằm trong luồng đã xây dựng.
+Địa chỉ mới dùng hai cấp: tỉnh/thành phố và phường/xã/đặc khu. Frontend cung cấp danh sách chọn phụ thuộc từ `frontend/src/data/vietnamDivisions.json` (34 tỉnh/thành, 3.321 đơn vị cấp xã, tải từ [Province Open API v2](https://provinces.open-api.vn/) ngày 10/11/2026). Bản ghi cũ vẫn giữ `district` tùy chọn để hiển thị lịch sử; migration Auth V2 bỏ ràng buộc NOT NULL trên cột này. Đơn hàng mới lưu địa chỉ hai cấp trong snapshot JSON.
+
+Phạm vi bản MVP được rút từ các route tại frontend/src/app/App.tsx, các model tại frontend/src/types/models.ts và yêu cầu tại frontend/implement.md, đồng thời bổ sung PayOS theo yêu cầu mới. Backend đã có luồng PayOS; cần khóa thử hoặc khóa thật để tạo giao dịch với nhà cung cấp. Frontend chưa có lựa chọn PayOS. Đánh giá sản phẩm, khuyến mãi và gửi email khôi phục mật khẩu chưa nằm trong luồng đã xây dựng.
 
 ### 1.1. Vai trò và chức năng
 
@@ -22,11 +24,11 @@ Phạm vi bản MVP được rút từ các route tại frontend/src/app/App.tsx
 | --- | --- | --- |
 | Frontend | Giao diện và luồng COD bằng mock data; giỏ hàng, yêu thích và một số dữ liệu lưu ở trình duyệt. | Thêm lựa chọn PayOS, trang chờ/kết quả thanh toán; kết nối và kiểm thử với API thật. |
 | API Gateway | Ứng dụng Quarkus chuyển tiếp các đường dẫn /api/v1 và có health check. | Xác thực/ủy quyền ở lớp phù hợp, quan sát và xử lý lỗi đầy đủ. |
-| Auth, Catalog, Order, Notification | Khung Quarkus, cấu hình và health check. | Resource, nghiệp vụ, migration, truy cập CSDL, bảo mật và kiểm thử; Order tích hợp PayOS. |
-| AI service | FastAPI với health check. | Chat, quản trị tri thức, ingestion, embeddings và retrieval thực. |
-| Kafka, PostgreSQL, MongoDB | Có cấu hình Compose phát triển. | Topic, database riêng, migration và tích hợp service. |
+| Auth, Catalog, Order, Notification | API, nghiệp vụ MVP, Flyway, PostgreSQL, JWT; Order hỗ trợ COD, PayOS, outbox; Notification nhận sự kiện Kafka. | Thử thanh toán với tài khoản PayOS, email/SMS và quy trình hoàn tiền. |
+| AI service | FastAPI, chat, lưu hội thoại, quản trị tri thức, ingestion, embeddings và retrieval. | Cấu hình API model để index và trả lời RAG thực. |
+| Kafka, PostgreSQL, MongoDB | Compose có Kafka và PostgreSQL, database riêng, migration và volume dữ liệu. | MongoDB chỉ là thành phần tùy chọn trong môi trường phát triển. |
 
-Chức năng quên mật khẩu hiện chỉ xác nhận yêu cầu trong giao diện demo; đổi mật khẩu chưa tích hợp. Chatbot hiện trả lời theo quy tắc và tài liệu mẫu, chưa phải AI/RAG thực. Notification service chưa gửi email/SMS. **Chưa có giao dịch PayOS thực trong repository.**
+Chức năng quên mật khẩu hiện chỉ xác nhận yêu cầu trong giao diện demo; đổi mật khẩu chưa tích hợp. Chatbot dùng RAG khi có khóa model và tài liệu đã index; khi chưa có tài liệu phù hợp sẽ trả lời mặc định. Notification service chưa gửi email/SMS. **Chưa kiểm thử giao dịch PayOS thật vì chưa có khóa PayOS.**
 
 ## 2. Kiến trúc tổng quan
 
@@ -44,6 +46,8 @@ API Gateway (8080)
   |
   +-- Notification service (8084) <- Kafka events -> fashion_notification
 ~~~
+
+Order gọi Catalog trực tiếp bằng gRPC/Protobuf qua cổng nội bộ 9000 cho `Reserve`, `Commit` và `Release` tồn kho. Hợp đồng duy nhất là `backend/common/src/main/resources/inventory.proto`; client gửi khóa nội bộ qua gRPC metadata `x-internal-key`. Các API dành cho browser vẫn là REST/JSON qua Gateway.
 
 Frontend chỉ gọi API Gateway; không truy cập database hoặc Kafka. Mỗi service sở hữu một database PostgreSQL riêng. Các khóa như user_id, product_id, variant_id, order_id đi qua ranh giới service chỉ là định danh tham chiếu; **không tạo foreign key giữa các database**. Order lưu snapshot sản phẩm, giá và địa chỉ tại thời điểm đặt để lịch sử không đổi khi danh mục/hồ sơ thay đổi.
 
@@ -65,7 +69,7 @@ Các endpoint ở trên là **đề xuất**, cần thống nhất với fronten
 ### 2.2. Luồng chính và quy tắc nghiệp vụ
 
 1. **Duyệt sản phẩm:** Catalog trả về sản phẩm ACTIVE, danh mục đang hiển thị, biến thể còn hàng; hỗ trợ q, category, minPrice, maxPrice, size, color, sort và phân trang. Trang admin có thể xem cả DRAFT/INACTIVE.
-2. **Đặt hàng:** Order lấy user_id từ token, nhận variantId và quantity của các món được chọn, gọi Catalog để xác nhận biến thể/giá và giữ tồn, tính lại tiền trên server, tạo đơn PENDING với địa chỉ snapshot và payment_method = COD hoặc PAYOS. Không tin unitPrice hoặc totalAmount gửi từ browser.
+2. **Đặt hàng:** Order lấy user_id từ token, nhận variantId và quantity của các món được chọn, gọi Catalog bằng gRPC để xác nhận biến thể/giá và giữ tồn, tính lại tiền trên server, tạo đơn PENDING với địa chỉ snapshot và payment_method = COD hoặc PAYOS. Không tin unitPrice hoặc totalAmount gửi từ browser.
 3. **Thanh toán COD:** Đơn bắt đầu với payment_status = UNPAID. Cửa hàng thu tiền khi giao hàng; việc xác nhận đã thu tiền là thao tác nghiệp vụ riêng, không được suy ra chỉ từ việc tạo đơn.
 4. **Thanh toán PayOS:** Order tạo payment attempt và mã orderCode dạng số duy nhất cho PayOS, gọi API tạo link bằng số tiền đã tính trên server, lưu paymentLinkId/checkoutUrl và trả checkoutUrl cho frontend chuyển hướng. Đơn và payment_status ở PENDING cho đến khi có kết quả xác thực. Order nhận webhook, kiểm tra signature, orderCode, paymentLinkId và amount; xử lý idempotent rồi chuyển payment_status sang PAID và đơn sang CONFIRMED khi hợp lệ. returnUrl/cancelUrl chỉ phục vụ hiển thị và tải lại trạng thái từ backend, **không phải bằng chứng thanh toán**. [API PayOS](https://payos.vn/docs/api/), [webhook](https://payos.vn/docs/du-lieu-tra-ve/webhook/).
 5. **Tồn kho liên service:** Catalog giữ tồn bằng reservation có thời hạn, bao gồm thời gian khách thanh toán PayOS. Khi thanh toán thành công, Order xác nhận reservation; khi link hết hạn/hủy hoặc thanh toán thất bại, Order hủy đơn và giải phóng reservation. Các thao tác phải có idempotency key; thiết kế production cần saga/compensation cho lỗi giữa các service, không có transaction SQL xuyên service.
@@ -122,7 +126,7 @@ CREATE TABLE addresses (
     recipient_name VARCHAR(150) NOT NULL,
     phone VARCHAR(20) NOT NULL,
     province VARCHAR(120) NOT NULL,
-    district VARCHAR(120) NOT NULL,
+    district VARCHAR(120), -- chỉ còn ở địa chỉ cũ; Auth migration V2 bỏ NOT NULL
     ward VARCHAR(120) NOT NULL,
     detail VARCHAR(300) NOT NULL,
     is_default BOOLEAN NOT NULL DEFAULT false,
@@ -156,7 +160,7 @@ CREATE INDEX ix_password_reset_tokens_user ON password_reset_tokens (user_id);
 
 ### 3.2. Catalog service — database fashion_catalog
 
-Một sản phẩm thuộc một danh mục, có nhiều ảnh và biến thể SKU. Tồn khả dụng = stock_quantity − reserved_quantity. Wishlist là dữ liệu Catalog theo user_id do Auth cấp, nhưng không có foreign key sang fashion_auth. Inventory reservation và movement phục vụ luồng đặt/hủy đơn và audit điều chỉnh thủ công.
+Một sản phẩm thuộc một danh mục, có nhiều ảnh và biến thể SKU. Danh mục tạo thành cây nhiều cấp bằng `categories.parent_id` (NULL là gốc); `V2__category_hierarchy.sql` chặn chu trình bằng trigger, kể cả khi đổi danh mục cha. Slug là duy nhất toàn Catalog. Lọc sản phẩm theo một danh mục bao gồm sản phẩm của mọi danh mục con ở mọi độ sâu nhờ truy vấn `WITH RECURSIVE`. Danh mục có con hoặc sản phẩm không được xóa; danh mục ẩn khiến toàn bộ nhánh con không xuất hiện trong API công khai. Tồn khả dụng = stock_quantity − reserved_quantity. Wishlist là dữ liệu Catalog theo user_id do Auth cấp, nhưng không có foreign key sang fashion_auth. Inventory reservation và movement phục vụ luồng đặt/hủy đơn và audit điều chỉnh thủ công.
 
 ~~~sql
 CREATE TABLE categories (
@@ -575,23 +579,23 @@ Nguồn trích dẫn lưu title/excerpt tại thời điểm trả lời; khi x�
 
 Prefix bên ngoài Gateway là /api/v1. Response đề xuất theo frontend/API_CONTRACT.md: ApiResponse<T> gồm success, data, message, timestamp; danh sách phân trang dùng PageResponse<T> trong data. Lỗi trả code, message và details khi cần. Không trả password_hash, token_hash hoặc thông tin nội bộ trong API response.
 
-| Service | Nhóm endpoint | Quyền | Trạng thái frontend/backend |
+| Service | Nhóm endpoint | Quyền | Trạng thái triển khai |
 | --- | --- | --- | --- |
-| Auth | POST /auth/register, /auth/login, /auth/logout, /auth/refresh | Public hoặc phiên hiện tại | Register/login/logout có mock; refresh chưa nối UI; backend chưa có. |
-| Auth | GET/PUT /users/me; CRUD /users/me/addresses | USER/ADMIN | Hồ sơ và địa chỉ có giao diện; địa chỉ còn local. |
-| Catalog | GET /products, /products/slug/{slug}, /categories | Public | Giao diện/mocks có; backend chưa có. |
-| Catalog | CRUD /admin/products, /admin/categories; GET/PATCH /admin/inventory | ADMIN | Giao diện admin có; API inventory/categories chưa tích hợp. |
-| Catalog | GET/POST/DELETE /wishlist | USER/ADMIN | Đề xuất cho API mode; hiện lưu local, khách chưa đăng nhập cũng có thể dùng local. |
-| Order | GET/POST/PATCH/DELETE /cart/items | USER/ADMIN | Đề xuất cho API mode; hiện lưu local. |
-| Order | POST /orders, GET /orders/my, GET /orders/{id}, PATCH /orders/{id}/cancel | USER/ADMIN, chỉ đơn của mình | UI COD có; backend chưa có. POST nhận `paymentMethod: COD/PAYOS`; khi chọn PayOS trả `checkoutUrl` và trạng thái để frontend chuyển hướng. Khách không tự hủy đơn PayOS đã PAID trong MVP. |
-| Order | GET /orders/{id}/payment | USER/ADMIN, chỉ đơn của mình | Đề xuất để trang trở về từ PayOS tải trạng thái thật từ backend; chưa có UI/backend. |
-| Order | POST /payments/payos/webhook | Public tại Gateway; xác thực chữ ký PayOS tại Order | Đề xuất; không yêu cầu JWT người dùng. Xác minh chữ ký và đối chiếu mã, link, số tiền trước khi cập nhật idempotent; chưa có backend. |
-| Order | GET /admin/orders, PATCH /admin/orders/{id}/status, GET /admin/statistics | ADMIN | UI có; backend chưa có. |
-| AI | POST /chat, GET /chat/conversations[/{id}] | Public/USER tùy chính sách lưu hội thoại | Chat mock có; lưu hội thoại server chưa có. |
-| AI | GET/POST/PUT/DELETE /admin/knowledge[/{id}], GET /admin/ai-conversations | ADMIN | Giao diện có; backend chưa có. |
-| Notification | Không mở endpoint public trong MVP | Nội bộ | Chưa tích hợp. |
+| Auth | POST /auth/register, /auth/login, /auth/logout, /auth/refresh | Public hoặc phiên hiện tại | Backend có; frontend còn dùng mock mặc định. |
+| Auth | GET/PUT /users/me; CRUD /users/me/addresses | USER/ADMIN | Backend có; frontend chưa nối API thật. |
+| Catalog | GET /products, /products/slug/{slug}, /categories | Public | Backend có tìm kiếm, lọc, phân trang; frontend chưa nối API thật. |
+| Catalog | CRUD /admin/products, /admin/categories; GET/PATCH /admin/inventory | ADMIN | Backend có; frontend chưa nối API thật. |
+| Catalog | GET/POST/DELETE /wishlist | USER/ADMIN | Backend có; frontend còn lưu local. |
+| Order | GET/POST/PATCH/DELETE /cart/items | USER/ADMIN | Backend có; frontend còn lưu local. |
+| Order | POST /orders, GET /orders/my, GET /orders/{id}, PATCH /orders/{id}/cancel | USER/ADMIN, chỉ đơn của mình | Backend có COD và PayOS; PayOS cần khóa provider, frontend chưa nối API thật. |
+| Order | GET /orders/{id}/payment | USER/ADMIN, chỉ đơn của mình | Backend có; frontend chưa có trang kết quả PayOS. |
+| Order | POST /payments/payos/webhook | Public tại Gateway; xác thực chữ ký PayOS tại Order | Backend có kiểm tra chữ ký và xử lý lặp; chưa thử với PayOS thật. |
+| Order | GET /admin/orders, PATCH /admin/orders/{id}/status, GET /admin/statistics | ADMIN | Backend có; frontend chưa nối API thật. |
+| AI | POST /chat, GET /chat/conversations[/{id}] | Public/USER tùy chính sách lưu hội thoại | Backend có; RAG cần cấu hình model và dữ liệu tri thức. |
+| AI | GET/POST/PUT/DELETE /admin/knowledge[/{id}], GET /admin/ai-conversations | ADMIN | Backend có; indexing cần khóa model. |
+| Notification | Không mở endpoint public trong MVP | Nội bộ | Kafka consumer và thông báo IN_APP đã có. |
 
-**Lưu ý hợp đồng:** frontend hiện gọi PATCH /admin/orders/{id}/status cả khi khách tự hủy trong API mode. Khi triển khai backend, phải sửa frontend sang PATCH /orders/{id}/cancel và kiểm tra user_id ở server. Model frontend hiện còn `MOCK_PAYMENT`; cần thay bằng `PAYOS` và hiển thị kết quả qua API. Gateway phải bổ sung route `/api/v1/payments/payos/webhook` và `/api/v1/orders/{id}/payment`; các route khác cũng chưa bao phủ toàn bộ bảng trên. Endpoint quản trị người dùng chỉ cần GET /admin/users cho giao diện hiện tại; khóa tài khoản/phân quyền là chức năng mở rộng, chưa có UI.
+**Lưu ý hợp đồng:** frontend hiện gọi PATCH /admin/orders/{id}/status cả khi khách tự hủy trong API mode. Cần sửa frontend sang PATCH /orders/{id}/cancel; backend đã kiểm tra user_id ở server. Model frontend hiện còn `MOCK_PAYMENT`; cần thay bằng `PAYOS` và hiển thị kết quả qua API. Gateway đã có route `/api/v1/payments/payos/webhook` và `/api/v1/orders/{id}/payment`. Endpoint quản trị người dùng có GET /admin/users; khóa tài khoản/phân quyền là chức năng mở rộng, chưa có UI.
 
 ## 5. Kafka và tính nhất quán
 
