@@ -1,6 +1,6 @@
 import type { HomeCategoryShowcase } from '../types/models';
 import { httpClient, useDbCatalog } from './httpClient';
-import { readLocal, writeLocal } from './storage';
+import { broadcastSync, readLocal, writeLocal } from './storage';
 
 const key = 'fashionhub_home_categories';
 const demo: HomeCategoryShowcase[] = [
@@ -108,12 +108,14 @@ export const homeCategoryService = {
         `/admin/home-categories/${item.id}`,
         payload,
       );
+      broadcastSync(key);
       return data.data;
     } else {
       const { data } = await httpClient.post<{ data: HomeCategoryShowcase }>(
         '/admin/home-categories',
         payload,
       );
+      broadcastSync(key);
       return data.data;
     }
   },
@@ -124,5 +126,6 @@ export const homeCategoryService = {
       return;
     }
     await httpClient.delete(`/admin/home-categories/${id}`);
+    broadcastSync(key);
   },
 };

@@ -28,6 +28,7 @@ public class CatalogResource {
     @Inject DataSource database;
     @Inject JsonWebToken jwt;
     @Inject AiIndexNotifier aiIndex;
+    @Inject PublicCatalogCache readCache;
 
     public record CategoryInput(String name, String slug, String description,
             String imageUrl, UUID parentId, Boolean isActive) {}
@@ -42,10 +43,10 @@ public class CatalogResource {
 
     @GET @Path("/categories")
     public Map<String, Object> categories() {
-        return Api.ok(Sql.list(database,
+        return Api.ok(readCache.get(PublicCatalogCache.CATEGORIES, () -> Sql.list(database,
                 "WITH RECURSIVE visible AS (SELECT id,parent_id,name,slug,description,image_url,is_active FROM categories WHERE parent_id IS NULL AND is_active=true "
                 + "UNION ALL SELECT c.id,c.parent_id,c.name,c.slug,c.description,c.image_url,c.is_active FROM categories c JOIN visible v ON c.parent_id=v.id WHERE c.is_active=true) "
-                + "SELECT id,parent_id,name,slug,description,image_url,is_active FROM visible ORDER BY name"));
+                + "SELECT id,parent_id,name,slug,description,image_url,is_active FROM visible ORDER BY name")));
     }
 
     @GET @Path("/admin/categories")
@@ -64,6 +65,7 @@ public class CatalogResource {
         Sql.update(database, "INSERT INTO categories(id,parent_id,name,slug,description,image_url,is_active) VALUES (?,?,?,?,?,?,?)",
                 id, input.parentId(), input.name(), input.slug(), input.description(),
                 input.imageUrl(), input.isActive() == null || input.isActive());
+        readCache.invalidate(PublicCatalogCache.CATEGORIES, PublicCatalogCache.HOME_CATEGORIES);
         aiIndex.productChanged();
         return Api.ok(category(id));
     }
@@ -79,6 +81,7 @@ public class CatalogResource {
                 input.parentId(), input.name(), input.slug(), input.description(), input.imageUrl(),
                 input.isActive() == null || input.isActive(), id) == 1,
                 404, "NOT_FOUND", "Không tìm thấy danh mục");
+        readCache.invalidate(PublicCatalogCache.CATEGORIES, PublicCatalogCache.HOME_CATEGORIES);
         aiIndex.productChanged();
         return Api.ok(category(id));
     }
@@ -92,6 +95,7 @@ public class CatalogResource {
                 409, "CATEGORY_IN_USE", "Danh mục đang có sản phẩm");
         Api.require(Sql.update(database, "DELETE FROM categories WHERE id=?", id) == 1,
                 404, "NOT_FOUND", "Không tìm thấy danh mục");
+        readCache.invalidate(PublicCatalogCache.CATEGORIES, PublicCatalogCache.HOME_CATEGORIES);
         aiIndex.productChanged();
         return Api.ok(Map.of());
     }

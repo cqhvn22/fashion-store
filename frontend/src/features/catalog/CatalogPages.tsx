@@ -37,14 +37,17 @@ import {
   SectionHeading,
 } from '../../components/common';
 import { ProductGrid } from '../../components/ProductCard';
+import { PUBLIC_METADATA_GC_MS, PUBLIC_METADATA_STALE_MS, PRODUCT_STALE_MS } from '../../services/cachePolicy';
 import { FlyToCart, type CartFlight } from '../../components/FlyToCart';
 import { ImageLightboxModal } from '../../components/ImageLightboxModal';
 import { ProductReviews } from '../../components/ProductReviews';
 
-function useCatalog(query: ProductQuery) {
+function useCatalog(query: ProductQuery, enabled = true) {
   return useQuery({
     queryKey: ['products', query],
     queryFn: () => productService.list(query),
+    enabled,
+    staleTime: PRODUCT_STALE_MS,
   });
 }
 
@@ -473,17 +476,23 @@ export function HomePage() {
   const { data: banners = [] } = useQuery({
     queryKey: ['banners'],
     queryFn: bannerService.list,
+    staleTime: PUBLIC_METADATA_STALE_MS,
+    gcTime: PUBLIC_METADATA_GC_MS,
   });
 
   const { data: categories = seedCategories } = useQuery({
     queryKey: ['categories'],
     queryFn: categoryService.list,
-    initialData: seedCategories,
+    placeholderData: seedCategories,
+    staleTime: PUBLIC_METADATA_STALE_MS,
+    gcTime: PUBLIC_METADATA_GC_MS,
   });
 
   const { data: homeCategories = [] } = useQuery({
     queryKey: ['home-categories'],
     queryFn: homeCategoryService.list,
+    staleTime: PUBLIC_METADATA_STALE_MS,
+    gcTime: PUBLIC_METADATA_GC_MS,
   });
 
   const { data, isLoading, error } = useCatalog({ limit: 36 });
@@ -675,7 +684,9 @@ export function CatalogPage({ mode = 'products' }: { mode?: 'products' | 'search
   const { data: categories = seedCategories } = useQuery({
     queryKey: ['categories'],
     queryFn: categoryService.list,
-    initialData: seedCategories,
+    placeholderData: seedCategories,
+    staleTime: PUBLIC_METADATA_STALE_MS,
+    gcTime: PUBLIC_METADATA_GC_MS,
   });
 
   const { slug } = useParams();
@@ -1260,6 +1271,7 @@ export function ProductDetailPage() {
     queryKey: ['product', slug],
     queryFn: () => productService.bySlug(slug!),
     enabled: !!slug,
+    staleTime: PRODUCT_STALE_MS,
   });
 
   const [variantId, setVariantId] = useState('');
@@ -1753,10 +1765,12 @@ function RelatedProducts({ categoryId, exclude }: { categoryId: string; exclude:
   const { data: categories = seedCategories } = useQuery({
     queryKey: ['categories'],
     queryFn: categoryService.list,
-    initialData: seedCategories,
+    placeholderData: seedCategories,
+    staleTime: PUBLIC_METADATA_STALE_MS,
+    gcTime: PUBLIC_METADATA_GC_MS,
   });
   const category = categories.find((item) => item.id === categoryId);
-  const { data } = useCatalog({ category: category?.slug, limit: 6 });
+  const { data } = useCatalog({ category: category?.slug, limit: 6 }, !!category);
   return (
     <ProductGrid
       products={data?.content.filter((item) => item.id !== exclude).slice(0, 4) ?? []}

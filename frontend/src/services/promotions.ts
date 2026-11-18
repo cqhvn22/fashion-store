@@ -1,7 +1,7 @@
 import type { Category, Product, ProductPromotion, PromotionTargetType } from '../types/models';
 import { categories as seedCategories, seedProducts } from '../mocks/catalog';
 import { httpClient, useDbCatalog } from './httpClient';
-import { readLocal, writeLocal } from './storage';
+import { broadcastSync, readLocal, writeLocal } from './storage';
 
 const endpoint = '/admin/promotions';
 export const PROMOTIONS_KEY = 'fashionhub_promotions';
@@ -395,6 +395,7 @@ export const promotionService = {
       const { data } = id
         ? await httpClient.put<{ data: ProductPromotion }>(`${endpoint}/${id}`, input)
         : await httpClient.post<{ data: ProductPromotion }>(endpoint, input);
+      broadcastSync(PROMOTIONS_KEY);
       return data.data;
     } catch (error) {
       if (error instanceof Error && error.message && !error.message.includes('Không thể kết nối máy chủ')) {
@@ -414,6 +415,7 @@ export const promotionService = {
     }
     try {
       await httpClient.delete(`${endpoint}/${id}`);
+      broadcastSync(PROMOTIONS_KEY);
     } catch {
       const currentList = readLocal<ProductPromotion[]>(PROMOTIONS_KEY, defaultPromotions);
       const nextList = currentList.filter((item) => item.id !== id);

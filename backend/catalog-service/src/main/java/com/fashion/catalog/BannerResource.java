@@ -16,13 +16,14 @@ import javax.sql.DataSource;
 @Produces(MediaType.APPLICATION_JSON)
 public class BannerResource {
     @Inject DataSource database;
+    @Inject PublicCatalogCache readCache;
 
     public record BannerInput(String title, String subtitle, String imageUrl, String linkUrl,
             String buttonLabel, Integer sortOrder, Boolean isActive) {}
 
     @GET @Path("/banners")
     public Map<String, Object> publicBanners() {
-        return Api.ok(list(true));
+        return Api.ok(readCache.get(PublicCatalogCache.BANNERS, () -> list(true)));
     }
 
     @GET @Path("/admin/banners")
@@ -40,6 +41,7 @@ public class BannerResource {
                 id, input.title().trim(), blank(input.subtitle()), input.imageUrl(), input.linkUrl(),
                 input.buttonLabel().trim(), input.sortOrder() == null ? 0 : input.sortOrder(),
                 input.isActive() == null || input.isActive());
+        readCache.invalidate(PublicCatalogCache.BANNERS);
         return Api.ok(one(id));
     }
 
@@ -51,6 +53,7 @@ public class BannerResource {
                 input.title().trim(), blank(input.subtitle()), input.imageUrl(), input.linkUrl(),
                 input.buttonLabel().trim(), input.sortOrder() == null ? 0 : input.sortOrder(),
                 input.isActive() == null || input.isActive(), id) == 1, 404, "NOT_FOUND", "Không tìm thấy banner");
+        readCache.invalidate(PublicCatalogCache.BANNERS);
         return Api.ok(one(id));
     }
 
@@ -59,6 +62,7 @@ public class BannerResource {
     public Map<String, Object> delete(@PathParam("id") UUID id) {
         Api.require(Sql.update(database, "DELETE FROM home_banners WHERE id=?", id) == 1,
                 404, "NOT_FOUND", "Không tìm thấy banner");
+        readCache.invalidate(PublicCatalogCache.BANNERS);
         return Api.ok(Map.of());
     }
 

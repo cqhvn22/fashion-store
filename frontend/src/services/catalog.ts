@@ -3,7 +3,7 @@ import type { Category, PageResponse, Product, ProductQuery } from '../types/mod
 import { endpoints } from './endpoints';
 import { httpClient, useDbCatalog } from './httpClient';
 import { applyPromotionsToProductList, getMockPromotions } from './promotions';
-import { readLocal, writeLocal } from './storage';
+import { broadcastSync, readLocal, writeLocal } from './storage';
 
 const key = 'fashionhub_products';
 const DATASET_VERSION_KEY = 'fashionhub_catalog_dataset_version';
@@ -59,6 +59,7 @@ export const categoryService = {
       };
       if (category.id) await httpClient.put(`/admin/categories/${category.id}`, payload);
       else await httpClient.post('/admin/categories', payload);
+      broadcastSync('fashionhub_categories');
       return;
     }
     const items = getMockCategories();
@@ -72,6 +73,7 @@ export const categoryService = {
   async remove(id: string) {
     if (useDbCatalog) {
       await httpClient.delete(`/admin/categories/${id}`);
+      broadcastSync('fashionhub_categories');
       return;
     }
     if (getMockCategories().some((item) => item.parentId === id))
@@ -194,6 +196,7 @@ export const productService = {
             product,
           )
         : await httpClient.post<{ data: Product }>(endpoints.admin.products, product);
+      broadcastSync('fashionhub_products');
       return data.data;
     }
     const items = getMockProducts();
@@ -206,6 +209,7 @@ export const productService = {
   async remove(id: string) {
     if (useDbCatalog) {
       await httpClient.delete(`${endpoints.admin.products}/${id}`);
+      broadcastSync('fashionhub_products');
       return;
     }
     saveMockProducts(getMockProducts().filter((item) => item.id !== id));

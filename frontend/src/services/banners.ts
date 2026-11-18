@@ -1,6 +1,6 @@
 import type { HomeBanner } from '../types/models';
 import { httpClient, useDbCatalog } from './httpClient';
-import { readLocal, writeLocal } from './storage';
+import { broadcastSync, readLocal, writeLocal } from './storage';
 
 const key = 'fashionhub_banners';
 const demo: HomeBanner[] = [
@@ -26,9 +26,13 @@ export const bannerService = {
     }
     if (item.id) await httpClient.put(`/admin/banners/${item.id}`, item);
     else await httpClient.post('/admin/banners', item);
+    broadcastSync(key);
   },
   async remove(id: string): Promise<void> {
     if (!useDbCatalog) writeLocal(key, readLocal(key, demo).filter((item) => item.id !== id));
-    else await httpClient.delete(`/admin/banners/${id}`);
+    else {
+      await httpClient.delete(`/admin/banners/${id}`);
+      broadcastSync(key);
+    }
   },
 };

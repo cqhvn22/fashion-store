@@ -18,6 +18,7 @@ import javax.sql.DataSource;
 public class HomeCategoryResource {
     @Inject DataSource database;
     @Inject ObjectMapper mapper;
+    @Inject PublicCatalogCache readCache;
 
     public record HomeCategoryInput(
         UUID categoryId,
@@ -32,12 +33,12 @@ public class HomeCategoryResource {
 
     @GET @Path("/home-categories")
     public Map<String, Object> publicHomeCategories() {
-        return Api.ok(list(true));
+        return Api.ok(readCache.get(PublicCatalogCache.HOME_CATEGORIES, () -> list(true)));
     }
 
     @GET @Path("/categories/home-showcases")
     public Map<String, Object> publicCategoriesShowcases() {
-        return Api.ok(list(true));
+        return publicHomeCategories();
     }
 
     @GET @Path("/admin/home-categories")
@@ -66,6 +67,7 @@ public class HomeCategoryResource {
         Sql.update(database,
                 "INSERT INTO home_categories(id,category_id,title,subtitle,selection_mode,product_ids,display_limit,sort_order,is_active) VALUES (?,?,?,?,?,?,?,?,?)",
                 id, input.categoryId(), input.title().trim(), blank(input.subtitle()), mode, productIdsJson, limit, sort, active);
+        readCache.invalidate(PublicCatalogCache.HOME_CATEGORIES);
         return Api.ok(one(id));
     }
 
@@ -89,6 +91,7 @@ public class HomeCategoryResource {
                 "UPDATE home_categories SET category_id=?,title=?,subtitle=?,selection_mode=?,product_ids=?,display_limit=?,sort_order=?,is_active=?,updated_at=now() WHERE id=?",
                 input.categoryId(), input.title().trim(), blank(input.subtitle()), mode, productIdsJson, limit, sort, active, id);
         Api.require(updated == 1, 404, "NOT_FOUND", "Không tìm thấy cấu hình danh mục trang chủ");
+        readCache.invalidate(PublicCatalogCache.HOME_CATEGORIES);
         return Api.ok(one(id));
     }
 
@@ -103,6 +106,7 @@ public class HomeCategoryResource {
     public Map<String, Object> delete(@PathParam("id") UUID id) {
         Api.require(Sql.update(database, "DELETE FROM home_categories WHERE id=?", id) == 1,
                 404, "NOT_FOUND", "Không tìm thấy cấu hình danh mục trang chủ");
+        readCache.invalidate(PublicCatalogCache.HOME_CATEGORIES);
         return Api.ok(Map.of("success", true));
     }
 

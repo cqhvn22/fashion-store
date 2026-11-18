@@ -14,6 +14,7 @@ export function setupGlobalSync(queryClient: QueryClient): () => void {
   isInitialized = true;
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const pendingKeys = new Set<string>();
 
   const handleKeySync = (key: string | null) => {
     // Only react to explicit cross-tab change events (no blind spamming)
@@ -40,6 +41,17 @@ export function setupGlobalSync(queryClient: QueryClient): () => void {
       void queryClient.invalidateQueries({ queryKey: ['admin-products'] });
       void queryClient.invalidateQueries({ queryKey: ['admin-inventory'] });
       void queryClient.invalidateQueries({ queryKey: ['admin-categories'] });
+      void queryClient.invalidateQueries({ queryKey: ['header-products'] });
+    }
+
+    if (key === 'fashionhub_banners') {
+      void queryClient.invalidateQueries({ queryKey: ['banners'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-banners'] });
+    }
+
+    if (key === 'fashionhub_home_categories') {
+      void queryClient.invalidateQueries({ queryKey: ['home-categories'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-home-categories'] });
     }
 
     if (key === 'fashionhub_cart') {
@@ -100,9 +112,12 @@ export function setupGlobalSync(queryClient: QueryClient): () => void {
 
   const scheduleSync = (key: string | null) => {
     if (!key) return;
+    pendingKeys.add(key);
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
-      handleKeySync(key);
+      for (const pendingKey of pendingKeys) handleKeySync(pendingKey);
+      pendingKeys.clear();
+      debounceTimer = null;
     }, 100);
   };
 
@@ -130,6 +145,8 @@ export function setupGlobalSync(queryClient: QueryClient): () => void {
 
   return () => {
     isInitialized = false;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    pendingKeys.clear();
     window.removeEventListener('storage', onStorage);
     if (bc) {
       bc.close();

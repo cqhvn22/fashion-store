@@ -36,6 +36,7 @@ import type { Category } from '../types/models';
 import { NotificationBell } from './NotificationBell';
 import { NotificationToast } from './NotificationToast';
 import { getThumbnailUrl, showOriginalOrPlaceholder } from '../utils/images';
+import { PUBLIC_METADATA_GC_MS, PUBLIC_METADATA_STALE_MS } from '../services/cachePolicy';
 
 const CATEGORY_THUMBNAILS_CACHE_KEY = 'fashionhub_category_thumbnails_cache_v2';
 const defaultCategoryImages = new Map(
@@ -89,9 +90,14 @@ export function Header() {
   const { data: categories = seedCategories } = useQuery({
     queryKey: ['categories'],
     queryFn: categoryService.list,
-    initialData: seedCategories,
+    placeholderData: seedCategories,
+    staleTime: PUBLIC_METADATA_STALE_MS,
+    gcTime: PUBLIC_METADATA_GC_MS,
   });
 
+  const needsProductImages = categories.some((category) => category.isActive && category.parentId &&
+    (!category.imageUrl || category.imageUrl === '/images/product-placeholder.svg') &&
+    !defaultCategoryImages.has(category.slug));
   const { data: allProducts = seedProducts } = useQuery({
     queryKey: ['header-products'],
     queryFn: async () => {
@@ -102,7 +108,9 @@ export function Header() {
         return seedProducts;
       }
     },
-    staleTime: 600000,
+    enabled: needsProductImages,
+    staleTime: PUBLIC_METADATA_STALE_MS,
+    gcTime: PUBLIC_METADATA_GC_MS,
   });
 
   // Map each leaf subcategory (con nhất) to a category image or product image, cached in localStorage
