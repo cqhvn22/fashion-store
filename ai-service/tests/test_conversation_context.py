@@ -1,6 +1,6 @@
 import unittest
 
-from app.services.conversation import catalog_count_question, retrieval_query, size_followup
+from app.services.conversation import catalog_count_question, retrieval_query, size_followup, store_location_question
 
 
 class ConversationContextTests(unittest.TestCase):
@@ -21,6 +21,11 @@ class ConversationContextTests(unittest.TestCase):
         self.assertTrue(catalog_count_question("Shop có bao nhiêu sản phẩm?"))
         self.assertTrue(catalog_count_question("Tổng số mặt hàng là bao nhiêu?"))
         self.assertFalse(catalog_count_question("Tôi muốn mua áo"))
+
+    def test_retired_store_lookup_does_not_capture_catalog_questions(self):
+        self.assertTrue(store_location_question("Hệ thống cửa hàng ở đâu?"))
+        self.assertTrue(store_location_question("Có shop nào gần tôi không?"))
+        self.assertFalse(store_location_question("Shop có bao nhiêu sản phẩm?"))
 
 
 if __name__ == "__main__":

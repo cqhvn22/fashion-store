@@ -36,7 +36,7 @@ Tài liệu tư vấn được chuẩn hóa khoảng trắng rồi chia thành �
 
 ## 4. Xử lý câu hỏi và truy xuất
 
-Khi nhận câu hỏi, AI service lưu tin nhắn, lấy tối đa **8 tin gần nhất** của hội thoại, xác định nhóm yêu cầu như sản phẩm, chính sách, giao hàng, size, số lượng sản phẩm hoặc cửa hàng gần người dùng. Ngữ cảnh đưa tới mô hình gồm tối đa **6 tin trước**. Câu hỏi nhiều lượt về size được viết lại theo lịch sử để tiếp tục truy xuất bảng size; người dùng có thể bổ sung chiều cao/cân nặng ở lượt sau.
+Khi nhận câu hỏi, AI service lưu tin nhắn, lấy tối đa **8 tin gần nhất** của hội thoại, xác định nhóm yêu cầu như sản phẩm, chính sách, giao hàng, size hoặc số lượng sản phẩm. Ngữ cảnh đưa tới mô hình gồm tối đa **6 tin trước**. Câu hỏi nhiều lượt về size được viết lại theo lịch sử để tiếp tục truy xuất bảng size; người dùng có thể bổ sung chiều cao/cân nặng ở lượt sau.
 
 Với sản phẩm, hệ thống chỉ xét bản ghi Catalog còn hàng, lọc trước theo size, màu, loại sản phẩm và điều kiện mùa/ngân sách nếu câu hỏi có nêu. Embedding câu hỏi được so cosine với embedding sản phẩm, kết hợp khớp từ khóa theo trọng số **0,85 ngữ nghĩa + 0,15 từ khóa** và một số điều chỉnh theo mùa. Ứng viên đạt điểm tối thiểu khoảng **0,18** được xếp hạng; tối đa 5 sản phẩm được đưa vào ngữ cảnh. Nếu Ollama tạm thời không tạo được embedding câu hỏi ở nhánh sản phẩm, việc xếp hạng có thể dựa vào từ khóa; không đồng nghĩa hệ thống đã có khả năng truy xuất ngữ nghĩa đầy đủ trong lần đó.
 
@@ -48,7 +48,7 @@ Trước khi tư vấn sản phẩm, AI gọi lại API chi tiết Catalog để
 
 Prompt gửi OpenRouter bao gồm quy tắc trả lời, tối đa bốn nguồn tài liệu đánh dấu `[TL1]...`, tối đa năm sản phẩm đánh dấu `[SP1]...`, câu hỏi hiện tại và lịch sử gần đây. Thông tin sản phẩm trong prompt có giá vừa kiểm tra, giá gốc, khuyến mãi, màu, size, chất liệu và đường dẫn khi có. Mô hình sinh ngôn ngữ tự nhiên dựa trên ngữ cảnh này. AI service lưu câu trả lời, nguồn tham khảo và các sản phẩm được gợi ý để giao diện hiển thị thẻ sản phẩm/đường dẫn. Phản hồi API có `answerOrigin`, `provider` và `requestedModel`, giúp phân biệt nhánh mô hình với nhánh quy tắc.
 
-Một số câu trả lời **cố ý không gọi mô hình**: quy tắc trả lời chính xác do quản trị viên tạo (`RULE`), tra cứu cửa hàng theo dữ liệu tọa độ (`STORE_LOOKUP`), yêu cầu cung cấp vị trí (`LOCATION_NEEDED`) và trường hợp không tìm thấy dữ liệu (`NO_RESULTS`). Điều này cần được mô tả rõ để không nhầm toàn bộ phản hồi là đầu ra OpenRouter. Với câu hỏi gần cửa hàng, giao diện có thể xin quyền vị trí; nếu khách từ chối, trợ lý hỏi tỉnh/thành hoặc khu vực. Tọa độ cửa hàng hiện là dữ liệu mẫu và khoảng cách là đường chim bay.
+Một số câu trả lời **cố ý không gọi mô hình**: quy tắc trả lời chính xác do quản trị viên tạo (`RULE`), yêu cầu khách nêu rõ sản phẩm cần kiểm tra (`PRODUCT_NEEDED`), thông báo chức năng không được hỗ trợ (`UNSUPPORTED_FEATURE`) và trường hợp không tìm thấy dữ liệu (`NO_RESULTS`). Điều này cần được mô tả rõ để không nhầm toàn bộ phản hồi là đầu ra OpenRouter. Hệ thống không còn tra cứu cửa hàng vật lý hoặc yêu cầu vị trí của khách.
 
 Nếu người dùng đăng nhập, AI gọi API nội bộ Order để lấy hạng, điểm và ưu đãi thực tế, rồi đưa vào ngữ cảnh cá nhân hóa. Khi API này không khả dụng, trợ lý tiếp tục ở mức chung và không tự tạo ưu đãi. Hội thoại được gắn với tài khoản khi đăng nhập; API kiểm tra quyền sở hữu hội thoại trước khi đọc/ghi.
 

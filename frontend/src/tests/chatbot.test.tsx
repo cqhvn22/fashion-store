@@ -32,6 +32,16 @@ describe('Chat dùng API AI', () => {
       .rejects.toThrow('OpenRouter đang bận');
   });
 
+  it('không gửi tọa độ khi khách hỏi về cửa hàng', async () => {
+    const post = vi.spyOn(httpClient, 'post').mockResolvedValue({
+      data: { data: { id: 'answer-2', role: 'ASSISTANT', content: 'Vui lòng liên hệ hỗ trợ.', sources: [] } },
+    });
+    await chatService.send('Có cửa hàng gần tôi không?', 'conversation-1');
+    expect(post).toHaveBeenCalledWith('/chat',
+      { message: 'Có cửa hàng gần tôi không?', conversationId: 'conversation-1' },
+      { timeout: 90000 });
+  });
+
   it('giữ hội thoại khi đóng và mở lại widget', async () => {
     vi.spyOn(httpClient, 'post').mockResolvedValue({
       data: { data: {

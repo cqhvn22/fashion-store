@@ -30,3 +30,14 @@ def catalog_count_question(message: str) -> bool:
         re.search(r"(?:bao nhiêu|có mấy|tổng số|số lượng)", query)
         and re.search(r"(?:sản phẩm|mặt hàng|mẫu hàng)", query)
     )
+
+
+def store_location_question(message: str) -> bool:
+    """Recognize the retired physical-store feature without catching product counts."""
+    query = message.casefold()
+    store = any(term in query for term in ("cửa hàng", "shop", "showroom", "chi nhánh"))
+    location = any(term in query for term in (
+        "hệ thống", "gần", "ở đâu", "địa chỉ", "vị trí", "bản đồ", "chỉ đường",
+        "mở cửa", "đến", "mua trực tiếp", "google map",
+    ))
+    return store and location

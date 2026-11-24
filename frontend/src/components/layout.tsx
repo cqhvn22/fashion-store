@@ -14,7 +14,6 @@ import {
   Layers,
   LayoutDashboard,
   LogOut,
-  MapPin,
   Menu,
   Package,
   Search,
@@ -366,9 +365,6 @@ export function Header() {
             <span>GIAO HÀNG MIỄN PHÍ TOÀN QUỐC CHO MỌI ĐƠN HÀNG TỪ 499.000 Đ</span>
           </div>
           <div className={`hidden md:flex items-center gap-5 font-semibold ${isTransparent ? 'text-white/80' : 'text-[#555]'}`}>
-            <Link to="/stores" className="hover:text-brand flex items-center gap-1 transition-colors">
-              <MapPin size={12} /> Hệ thống cửa hàng
-            </Link>
             <Link to="/policies/returns" className="hover:text-brand transition-colors">
               Đổi trả dễ dàng 7 ngày
             </Link>
@@ -855,11 +851,6 @@ export function Footer() {
             <li>
               <Link to="/about" className="hover:text-brand transition-colors">
                 Triết lý thời trang
-              </Link>
-            </li>
-            <li>
-              <Link to="/stores" className="hover:text-brand transition-colors">
-                Hệ thống cửa hàng
               </Link>
             </li>
             <li>

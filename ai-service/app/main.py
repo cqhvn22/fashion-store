@@ -16,9 +16,8 @@ from app.core.security import admin_user, current_user
 from app.services.knowledge import (index_document, retrieve, seed_default_policies,
                                     index_missing_policies, find_exact_response_rule)
 from app.services.model import generate_ai_chat, choose_products
-from app.services.conversation import catalog_count_question, size_followup, retrieval_query
+from app.services.conversation import catalog_count_question, size_followup, retrieval_query, store_location_question
 from app.services.products import catalog_product_count, retrieve_products, refresh_live_products, sync_all, sync_status
-from app.services.stores import nearest, by_area
 from app.services.inventory import (is_inventory_inquiry, resolve_product_for_inventory,
                                     query_live_inventory, extract_requested_size, extract_requested_color)
 from app.core.settings import PRODUCT_SYNC_SECONDS, AI_PROVIDER, AI_CHAT_MODEL, ORDER_SERVICE_URL, INTERNAL_API_KEY
@@ -53,8 +52,6 @@ class KnowledgeVisibility(BaseModel):
 class ChatInput(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     conversationId: str | UUID | None = None
-    latitude: float | None = Field(default=None, ge=-90, le=90)
-    longitude: float | None = Field(default=None, ge=-180, le=180)
 
 
 @app.on_event("startup")
@@ -371,10 +368,9 @@ def chat(payload: ChatInput, user: dict | None = Depends(current_user)):
         or bool(re.search(r"\b(?:mặc|mua|chọn|lấy|hợp|vừa)\s+size\b", question))
         or (bool(re.search(r"\b\d+\s*kg\b", question)) or bool(re.search(r"\b\d+m\d*\b", question)))
     )
-    is_store_inquiry = any(term in question for term in ("cửa hàng", "showroom", "chi nhánh", "địa chỉ", "ở đâu", "chỗ nào", "mở cửa", "đóng cửa", "google map", "bản đồ"))
     is_terms_inquiry = any(term in question for term in ("hotline", "tổng đài", "số điện thoại", "bảo hành", "chính hãng", "liên hệ", "cskh", "điều khoản", "bảo mật", "uy tín"))
     is_size_inquiry = is_size_inquiry or size_followup(raw_text, history)
-    is_policy = is_shipping_inquiry or is_returns_inquiry or is_size_inquiry or is_store_inquiry or is_terms_inquiry
+    is_policy = is_shipping_inquiry or is_returns_inquiry or is_size_inquiry or is_terms_inquiry
     search_query = retrieval_query(raw_text, sizing=is_size_inquiry)
 
     # 5. Explicit Off-topic check
@@ -398,48 +394,21 @@ def chat(payload: ChatInput, user: dict | None = Depends(current_user)):
     is_catalog_count = catalog_count_question(raw_text)
     is_inventory = is_inventory_inquiry(raw_text) and not is_off_topic_query
     inv_target_product = resolve_product_for_inventory(raw_text, conversation_id, history) if is_inventory else None
-    location_followup = any("bạn đang ở đâu" in row.get("content", "").lower() for row in history[-2:])
-    area_matches = by_area(raw_text)
-    is_nearest_store = (is_store_inquiry and (
-        bool(area_matches) or any(term in question for term in ("gần", "quanh đây", "gần nhất", "ở đâu")))) \
-        or payload.latitude is not None or location_followup
-
     product_matches = []
     matches = []
     answer_origin = "MODEL"
     exact_rule = find_exact_response_rule(payload.message)
 
-    if exact_rule:
+    if store_location_question(raw_text):
+        response_text = "FashionHub hiện chỉ hỗ trợ mua sắm trực tuyến và chưa có chức năng tra cứu cửa hàng. Bạn có thể xem sản phẩm trên website hoặc liên hệ bộ phận hỗ trợ."
+        answer_origin = "UNSUPPORTED_FEATURE"
+    elif exact_rule:
         # A rule configured by an admin is intentionally deterministic.
         matches = [{"id": exact_rule["id"], "document_id": exact_rule["id"],
                     "title": exact_rule["title"], "content": exact_rule["content"],
                     "score": 1.0, "kind": "knowledge"}]
         response_text = exact_rule["answer"]
         answer_origin = "RULE"
-    elif is_nearest_store:
-        if (payload.latitude is None) != (payload.longitude is None):
-            raise HTTPException(status_code=422, detail="Vị trí cần đủ vĩ độ và kinh độ.")
-        nearby = (nearest(payload.latitude, payload.longitude)
-                  if payload.latitude is not None and payload.longitude is not None
-                  else area_matches)
-        if nearby:
-            store_context = [f"{row['name']} — {row['address']}, {row['district']}, {row['city']}"
-                             + (f" — khoảng {row['distanceKm']} km đường chim bay" if 'distanceKm' in row else "")
-                             for row in nearby]
-            matches = [{"title": row["name"], "content": store_context[index],
-                        "source_url": "/stores", "score": 1.0, "kind": "knowledge"}
-                       for index, row in enumerate(nearby)]
-            lead = ("Các cửa hàng gần vị trí của bạn theo khoảng cách ước tính đường chim bay:"
-                    if payload.latitude is not None else
-                    "Các cửa hàng phù hợp với khu vực bạn cung cấp (cần vị trí cụ thể để xếp theo khoảng cách):")
-            response_text = lead + "\n\n" + "\n".join(
-                f"{index}. **{row['name']}** — {row['address']}, {row['district']}, {row['city']}"
-                + (f" — khoảng {row['distanceKm']} km" if 'distanceKm' in row else "")
-                for index, row in enumerate(nearby, 1)) + "\n\n[Xem hệ thống cửa hàng](/stores)"
-            answer_origin = "STORE_LOOKUP"
-        else:
-            response_text = "Bạn đang ở tỉnh/thành phố hoặc khu vực nào? Mình sẽ tìm cửa hàng phù hợp cho bạn."
-            answer_origin = "LOCATION_NEEDED"
     elif is_catalog_count:
         count, live = catalog_product_count()
         if count == 0 and not live:
@@ -533,7 +502,7 @@ def chat(payload: ChatInput, user: dict | None = Depends(current_user)):
         )
     elif is_inventory and not is_product_inquiry:
         response_text = "Bạn đang muốn kiểm tra tồn kho cho sản phẩm nào? Bạn có thể cho mình biết tên sản phẩm hoặc mã SP (ví dụ: SP1, SP2) để mình tra cứu kho cho bạn nhé."
-        answer_origin = "LOCATION_NEEDED"
+        answer_origin = "PRODUCT_NEEDED"
     elif is_product_inquiry:
         try:
             product_matches = refresh_live_products(

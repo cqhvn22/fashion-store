@@ -186,7 +186,7 @@ export interface ChatMessage {
   conversationId: string;
   role: 'USER' | 'ASSISTANT';
   content: string;
-  answerOrigin?: 'MODEL' | 'RULE' | 'NO_RESULTS' | 'LOCATION_NEEDED' | 'STORE_LOOKUP';
+  answerOrigin?: 'MODEL' | 'RULE' | 'NO_RESULTS' | 'PRODUCT_NEEDED' | 'UNSUPPORTED_FEATURE';
   provider?: string | null;
   requestedModel?: string | null;
   sources?: ChatSource[];

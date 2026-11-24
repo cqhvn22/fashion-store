@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FileText,
@@ -11,13 +10,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Mail,
-  MapPin,
-  Clock,
-  Search,
-  ExternalLink,
-  Navigation,
 } from 'lucide-react';
-import { storesList } from '../../data/storesData';
 
 export type ContentPageName =
   | 'terms'
@@ -26,8 +19,7 @@ export type ContentPageName =
   | 'privacy'
   | 'size-guide'
   | 'about'
-  | 'contact'
-  | 'stores';
+  | 'contact';
 
 interface PolicyNavItem {
   id: ContentPageName;
@@ -38,13 +30,6 @@ interface PolicyNavItem {
 }
 
 const policyNavItems: PolicyNavItem[] = [
-  {
-    id: 'stores',
-    path: '/stores',
-    label: 'Hệ thống cửa hàng',
-    shortLabel: 'Cửa hàng',
-    icon: MapPin,
-  },
   {
     id: 'terms',
     path: '/policies/terms',
@@ -192,8 +177,6 @@ export function ContentPage({ name }: { name: ContentPageName }) {
 
 function renderPolicyContent(name: ContentPageName) {
   switch (name) {
-    case 'stores':
-      return <StoresContent />;
     case 'terms':
       return <TermsContent />;
     case 'returns':
@@ -214,217 +197,7 @@ function renderPolicyContent(name: ContentPageName) {
 }
 
 /* =========================================================================
-   1. HỆ THỐNG CỬA HÀNG (STORE LOCATOR VỚI GOOGLE MAPS)
-   ========================================================================= */
-function StoresContent() {
-  const [selectedCity, setSelectedCity] = useState<'Tất cả' | 'Hà Nội' | 'TP. Hồ Chí Minh' | 'Đà Nẵng'>('Tất cả');
-  const [search, setSearch] = useState('');
-  const [activeStoreId, setActiveStoreId] = useState(storesList[0].id);
-
-  const filtered = storesList.filter((s) => {
-    const matchCity = selectedCity === 'Tất cả' || s.city === selectedCity;
-    const q = search.toLowerCase().trim();
-    const matchSearch =
-      !q ||
-      s.name.toLowerCase().includes(q) ||
-      s.address.toLowerCase().includes(q) ||
-      s.district.toLowerCase().includes(q);
-    return matchCity && matchSearch;
-  });
-
-  const activeStore = filtered.find((s) => s.id === activeStoreId) || filtered[0] || storesList[0];
-
-  const cities: ('Tất cả' | 'Hà Nội' | 'TP. Hồ Chí Minh' | 'Đà Nẵng')[] = [
-    'Tất cả',
-    'Hà Nội',
-    'TP. Hồ Chí Minh',
-    'Đà Nẵng',
-  ];
-
-  return (
-    <article className="space-y-6 text-sm text-[#444]">
-      <div className="border-b border-[#eee] pb-4">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-[#767676]">
-          FASHIONHUB · HỆ THỐNG CỬA HÀNG
-        </span>
-        <h1 className="text-xl sm:text-2xl font-extrabold uppercase text-ink mt-1 tracking-tight">
-          Hệ Thống Cửa Hàng FashionHub Toàn Quốc
-        </h1>
-        <p className="text-xs text-[#767676] mt-1">
-          Trải nghiệm trực tiếp chất lượng vải, phom dáng và dịch vụ may đo, đổi trả tại 10 điểm bán trên toàn quốc.
-        </p>
-      </div>
-
-      {/* Filter Tabs & Search Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#eee]">
-        {/* City Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-          {cities.map((city) => {
-            const count = city === 'Tất cả' ? storesList.length : storesList.filter((s) => s.city === city).length;
-            const isActive = selectedCity === city;
-            return (
-              <button
-                key={city}
-                type="button"
-                onClick={() => setSelectedCity(city)}
-                aria-label={`Lọc theo ${city}`}
-                className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors whitespace-nowrap border ${
-                  isActive
-                    ? 'bg-ink text-white border-ink'
-                    : 'bg-[#f4f4f4] text-[#555] border-[#e5e5e5] hover:bg-slate-200 hover:text-ink'
-                }`}
-              >
-                {city} ({count})
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Search Store input */}
-        <div className="relative w-full sm:w-64">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#888]" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm theo tên hoặc đường..."
-            aria-label="Tìm kiếm cửa hàng"
-            className="w-full pl-9 pr-3 py-1.5 text-xs border border-[#ccc] bg-white text-ink placeholder:text-[#999] focus:outline-none focus:border-ink"
-          />
-        </div>
-      </div>
-
-      {/* Main Stores & Google Map Grid */}
-      <div className="grid lg:grid-cols-12 gap-6 items-start">
-        {/* Left List of Stores */}
-        <div className="lg:col-span-5 space-y-2.5 max-h-[640px] overflow-y-auto pr-1 scrollbar-thin">
-          {filtered.length === 0 ? (
-            <div className="p-8 text-center border border-[#eee] text-xs text-[#888]">
-              Không tìm thấy cửa hàng phù hợp với từ khóa "{search}".
-            </div>
-          ) : (
-            filtered.map((store) => {
-              const isSelected = store.id === activeStore.id;
-              return (
-                <div
-                  key={store.id}
-                  onClick={() => setActiveStoreId(store.id)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setActiveStoreId(store.id);
-                    }
-                  }}
-                  className={`p-3.5 border transition-all cursor-pointer text-left ${
-                    isSelected
-                      ? 'border-l-4 border-l-brand border-[#ccc] bg-[#fafafa]'
-                      : 'border-[#eee] hover:border-[#ccc] bg-white'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <h3 className={`text-xs font-bold uppercase tracking-wide ${isSelected ? 'text-brand' : 'text-ink'}`}>
-                      {store.name}
-                    </h3>
-                    <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 bg-[#f0f0f0] text-[#555] whitespace-nowrap">
-                      {store.tag}
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-[#555] flex items-start gap-1.5 mt-1.5 leading-snug">
-                    <MapPin size={13} className="text-brand shrink-0 mt-0.5" />
-                    <span>{store.address}</span>
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-[11px] text-[#777]">
-                    <span className="flex items-center gap-1">
-                      <PhoneCall size={12} /> {store.phone}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock size={12} /> {store.hours}
-                    </span>
-                  </div>
-
-                  {/* Services pills */}
-                  <div className="flex flex-wrap gap-1 mt-2.5">
-                    {store.services.slice(0, 3).map((srv) => (
-                      <span key={srv} className="text-[10px] bg-[#f0f0f0] text-[#666] px-1.5 py-0.5">
-                        {srv}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="mt-3 pt-2 border-t border-[#f0f0f0] flex items-center justify-between text-xs">
-                    <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-semibold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Đang mở cửa
-                    </span>
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                        `${store.name} ${store.address}`
-                      )}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-brand hover:underline inline-flex items-center gap-1 font-semibold text-[11px]"
-                    >
-                      <span>Mở Google Maps</span>
-                      <ExternalLink size={12} />
-                    </a>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Right Google Maps Embed */}
-        <div className="lg:col-span-7 border border-[#e5e5e5] bg-[#f8f8f8] flex flex-col h-[480px] lg:h-[640px] sticky top-28 overflow-hidden">
-          {/* Active store info header */}
-          <div className="p-3 bg-white border-b border-[#eee] flex items-center justify-between gap-3 text-xs">
-            <div className="min-w-0">
-              <strong className="block text-ink uppercase tracking-wide truncate">
-                {activeStore.name}
-              </strong>
-              <span className="text-[11px] text-[#767676] truncate block">
-                {activeStore.address}
-              </span>
-            </div>
-            <a
-              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                `${activeStore.name} ${activeStore.address}`
-              )}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 bg-ink text-white hover:bg-brand text-xs font-semibold uppercase tracking-wider transition-colors"
-            >
-              <span>Chỉ đường</span>
-              <Navigation size={12} />
-            </a>
-          </div>
-
-          {/* Interactive Google Map Iframe */}
-          <div className="flex-1 w-full h-full relative">
-            <iframe
-              key={activeStore.id}
-              title={`Bản đồ vị trí ${activeStore.name}`}
-              src={`https://maps.google.com/maps?q=${encodeURIComponent(
-                activeStore.mapQuery
-              )}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
-              className="w-full h-full border-0"
-              loading="lazy"
-              allowFullScreen
-            />
-          </div>
-        </div>
-      </div>
-    </article>
-  );
-}
-
-/* =========================================================================
-   2. ĐIỀU KHOẢN DỊCH VỤ & SỬ DỤNG WEBSITE (TERMS OF SERVICE)
+   1. ĐIỀU KHOẢN DỊCH VỤ & SỬ DỤNG WEBSITE (TERMS OF SERVICE)
    ========================================================================= */
 function TermsContent() {
   return (
@@ -562,7 +335,7 @@ function TermsContent() {
 }
 
 /* =========================================================================
-   3. CHÍNH SÁCH ĐỔI TRẢ & HOÀN TIỀN (RETURN & REFUND POLICY)
+   2. CHÍNH SÁCH ĐỔI TRẢ & HOÀN TIỀN (RETURN & REFUND POLICY)
    ========================================================================= */
 function ReturnsContent() {
   return (
@@ -591,8 +364,8 @@ function ReturnsContent() {
         </div>
         <div className="border border-[#e5e5e5] bg-[#fafafa] p-4 text-center">
           <div className="text-2xl font-black text-ink">TOÀN QUỐC</div>
-          <div className="text-xs font-bold text-ink mt-1">Đổi tại cửa hàng & online</div>
-          <p className="text-[11px] text-[#767676] mt-1">Tại bất kỳ cửa hàng nào hoặc bưu điện</p>
+          <div className="text-xs font-bold text-ink mt-1">Đổi hàng qua vận chuyển</div>
+          <p className="text-[11px] text-[#767676] mt-1">Liên hệ hỗ trợ để gửi hàng đổi</p>
         </div>
       </div>
 
@@ -644,7 +417,7 @@ function ReturnsContent() {
               <tr>
                 <td className="p-3 font-semibold text-ink">Khách hàng muốn đổi size (chật/rộng)</td>
                 <td className="p-3">Hỗ trợ đổi sang size vừa vặn</td>
-                <td className="p-3">Miễn phí tại cửa hàng; khách chịu 1 chiều ship nếu gửi bưu điện</td>
+                <td className="p-3">Khách chịu phí vận chuyển một chiều khi gửi hàng đổi</td>
               </tr>
               <tr>
                 <td className="p-3 font-semibold text-ink">Khách muốn đổi mẫu khác</td>
@@ -660,7 +433,7 @@ function ReturnsContent() {
 }
 
 /* =========================================================================
-   4. CHÍNH SÁCH GIAO HÀNG (SHIPPING POLICY)
+   3. CHÍNH SÁCH GIAO HÀNG (SHIPPING POLICY)
    ========================================================================= */
 function ShippingContent() {
   return (
@@ -736,7 +509,7 @@ function ShippingContent() {
 }
 
 /* =========================================================================
-   5. CHÍNH SÁCH BẢO MẬT DỮ LIỆU CÁ NHÂN (PRIVACY POLICY)
+   4. CHÍNH SÁCH BẢO MẬT DỮ LIỆU CÁ NHÂN (PRIVACY POLICY)
    ========================================================= */
 function PrivacyContent() {
   return (
@@ -780,7 +553,7 @@ function PrivacyContent() {
 }
 
 /* =========================================================================
-   6. HƯỚNG DẪN CHỌN SIZE (SIZE GUIDE CHO M, L, XL, 2XL, 3XL)
+   5. HƯỚNG DẪN CHỌN SIZE (SIZE GUIDE CHO M, L, XL, 2XL, 3XL)
    ========================================================================= */
 function SizeGuideContent() {
   return (
@@ -948,7 +721,7 @@ function SizeGuideContent() {
           <div className="p-3.5 border border-[#e5e5e5] bg-[#fafafa]">
             <div className="font-bold text-ink mb-1">Đổi size miễn phí</div>
             <p className="text-[#555]">
-              Nếu nhận hàng mặc chưa vừa, FashionHub hỗ trợ đổi size trong vòng <strong>7 ngày</strong> tại bất kỳ cửa hàng nào trên toàn quốc hoặc qua bưu điện.
+              Nếu nhận hàng mặc chưa vừa, FashionHub hỗ trợ đổi size trong vòng <strong>7 ngày</strong> qua vận chuyển. Hãy liên hệ bộ phận hỗ trợ để được hướng dẫn.
             </p>
           </div>
         </div>
@@ -958,7 +731,7 @@ function SizeGuideContent() {
 }
 
 /* =========================================================================
-   7. VỀ FASHIONHUB (ABOUT US)
+   6. VỀ FASHIONHUB (ABOUT US)
    ========================================================================= */
 function AboutContent() {
   return (
@@ -999,7 +772,7 @@ function AboutContent() {
 }
 
 /* =========================================================================
-   8. LIÊN HỆ HỖ TRỢ (CONTACT US)
+   7. LIÊN HỆ HỖ TRỢ (CONTACT US)
    ========================================================================= */
 function ContactContent() {
   return (
@@ -1034,21 +807,6 @@ function ContactContent() {
         </div>
       </div>
 
-      <div className="border border-[#e5e5e5] p-5 bg-white text-xs space-y-2">
-        <div className="font-bold text-ink text-xs uppercase tracking-wide flex items-center gap-1.5">
-          <MapPin size={15} className="text-brand" /> Hệ thống cửa hàng trên toàn quốc
-        </div>
-        <p className="text-[#555]">
-          FashionHub hiện có 10 cửa hàng tại Hà Nội, TP. Hồ Chí Minh và Đà Nẵng. Bạn có thể ghé thăm trực tiếp hoặc tra cứu vị trí trên bản đồ.
-        </p>
-        <Link
-          to="/stores"
-          className="inline-flex items-center gap-1 text-xs font-bold text-brand hover:underline pt-1"
-        >
-          <span>Xem hệ thống 10 cửa hàng & vị trí Google Maps</span>
-          <ChevronRight size={14} />
-        </Link>
-      </div>
     </article>
   );
 }

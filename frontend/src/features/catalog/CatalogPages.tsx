@@ -527,7 +527,7 @@ export function HomePage() {
                 Đổi trả trong 7 ngày
               </h4>
               <p className="text-xs text-[#767676] mt-0.5">
-                Đổi size, mẫu mã thuận tiện tại mọi cửa hàng
+                Liên hệ hỗ trợ để đổi size, mẫu mã qua vận chuyển
               </p>
             </div>
           </div>
@@ -1702,7 +1702,7 @@ export function ProductDetailPage() {
             </p>
             <p className="flex items-center gap-2">
               <RotateCcw size={16} className="text-brand shrink-0" />
-              <span>Đổi trả thuận tiện tại hệ thống cửa hàng trong 7 ngày</span>
+              <span>Hỗ trợ đổi trả qua vận chuyển trong 7 ngày</span>
             </p>
             <p className="flex items-center gap-2">
               <ShieldCheck size={16} className="text-brand shrink-0" />

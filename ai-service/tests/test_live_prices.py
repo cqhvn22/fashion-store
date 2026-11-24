@@ -1,19 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from app.services.stores import nearest, by_area
 from app.services.products import refresh_live_products
 from app.services.model import generate_ai_chat
-
-
-class StoreSearchTests(unittest.TestCase):
-    def test_coordinates_rank_city_store_first(self):
-        stores = nearest(21.0112, 105.8491)
-        self.assertEqual(stores[0]["name"], "FashionHub Vincom Bà Triệu")
-        self.assertEqual(stores[0]["distanceKm"], 0)
-
-    def test_manual_area_when_location_denied(self):
-        self.assertTrue(all(row["city"] == "Đà Nẵng" for row in by_area("Tôi ở Đà Nẵng")))
 
 
 class LivePriceTests(unittest.TestCase):

@@ -79,10 +79,10 @@ export const knowledgeService = {
 };
 
 export const chatService = {
-  async send(prompt: string, conversationId: string, location?: { latitude: number; longitude: number }): Promise<ChatMessage> {
+  async send(prompt: string, conversationId: string): Promise<ChatMessage> {
     const { data } = await httpClient.post<{ data: ChatMessage }>(
       endpoints.chat,
-      { message: prompt, conversationId, ...location },
+      { message: prompt, conversationId },
       { timeout: 90000 },
     );
     if (!data?.data?.content) {

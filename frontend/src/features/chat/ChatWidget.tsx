@@ -6,8 +6,6 @@ import {
   X,
   BookOpen,
   ChevronRight,
-  MapPin,
-  ExternalLink,
   RotateCcw,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -52,63 +50,29 @@ function renderInline(text: string): React.ReactNode[] {
       const closeBracket = token.indexOf('](');
       const linkText = token.slice(1, closeBracket);
       const linkUrl = token.slice(closeBracket + 2, -1);
-      const isMap = linkUrl.includes('google.com/maps') || linkUrl.includes('maps.google.com');
-
-      if (isMap) {
-        elements.push(
-          <a
-            key={`map-${match.index}`}
-            href={linkUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1 my-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 border border-emerald-300 font-semibold text-xs transition shadow-sm group no-underline"
-          >
-            <MapPin size={13} className="text-emerald-600 group-hover:scale-110 transition-transform shrink-0" />
-            <span>{linkText.includes('Google Maps') ? linkText : `${linkText} (Google Maps)`}</span>
-            <ExternalLink size={12} className="opacity-70 shrink-0" />
-          </a>,
-        );
-      } else {
-        elements.push(
-          <a
-            key={`a-${match.index}`}
-            href={linkUrl}
-            className="text-brand hover:underline font-semibold"
-            target={linkUrl.startsWith('/') ? undefined : '_blank'}
-            rel="noreferrer"
-          >
-            {linkText}
-          </a>,
-        );
-      }
+      elements.push(
+        <a
+          key={`a-${match.index}`}
+          href={linkUrl}
+          className="text-brand hover:underline font-semibold"
+          target={linkUrl.startsWith('/') ? undefined : '_blank'}
+          rel="noreferrer"
+        >
+          {linkText}
+        </a>,
+      );
     } else if (token.startsWith('http://') || token.startsWith('https://')) {
-      const isMap = token.includes('google.com/maps') || token.includes('maps.google.com');
-      if (isMap) {
-        elements.push(
-          <a
-            key={`map-raw-${match.index}`}
-            href={token}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1 my-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 border border-emerald-300 font-semibold text-xs transition shadow-sm group no-underline"
-          >
-            <MapPin size={13} className="text-emerald-600 group-hover:scale-110 transition-transform shrink-0" />
-            <span>Xem chỉ đường Google Maps ↗</span>
-          </a>,
-        );
-      } else {
-        elements.push(
-          <a
-            key={`url-${match.index}`}
-            href={token}
-            target="_blank"
-            rel="noreferrer"
-            className="text-brand hover:underline text-xs break-all"
-          >
-            {token}
-          </a>,
-        );
-      }
+      elements.push(
+        <a
+          key={`url-${match.index}`}
+          href={token}
+          target="_blank"
+          rel="noreferrer"
+          className="text-brand hover:underline text-xs break-all"
+        >
+          {token}
+        </a>,
+      );
     }
     lastIndex = regex.lastIndex;
   }
@@ -228,42 +192,6 @@ export function FormattedChatMessage({
       continue;
     }
 
-    // Google Maps Link line: render button + embedded interactive map preview
-    const mapUrlMatch = trimmed.match(
-      /https:\/\/(?:www\.)?google\.com\/maps\/search\/\?api=1&query=([^)\s"]+)/,
-    );
-    if (mapUrlMatch) {
-      const rawQuery = decodeURIComponent(mapUrlMatch[1].replace(/\+/g, ' '));
-      nodes.push(
-        <div key={`map-block-${i}`} className="my-1.5">
-          <div>{renderInline(trimmed)}</div>
-          <div className="mt-2 mb-2 rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-white">
-            <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 border-b border-slate-200 text-[11px] font-medium text-slate-600">
-              <span className="flex items-center gap-1.5 font-semibold text-slate-700">
-                <MapPin size={12} className="text-emerald-600" />
-                Bản đồ chỉ đường Google Maps
-              </span>
-              <a
-                href={mapUrlMatch[0]}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-emerald-700 hover:text-emerald-800 font-semibold flex items-center gap-1 text-[11px] no-underline"
-              >
-                Mở Google Maps <ExternalLink size={11} />
-              </a>
-            </div>
-            <iframe
-              title={`Bản đồ ${rawQuery}`}
-              className="w-full h-36 border-0"
-              loading="lazy"
-              src={`https://maps.google.com/maps?q=${encodeURIComponent(rawQuery)}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
-            />
-          </div>
-        </div>,
-      );
-      continue;
-    }
-
     // 1. Numbered item: "1. **Áo Phông Regular...**" or "### 1. **Áo Phông Loose...** (Giá rẻ...)" or "1) Áo Phông..."
     const numMatch = trimmed.match(
       /^(?:#{1,6}\s*|[#*•-]+\s*)?(\d+)[.\)]\s+(.*)$/,
@@ -271,26 +199,6 @@ export function FormattedChatMessage({
     if (numMatch && numMatch[1] && numMatch[2]) {
       const num = numMatch[1];
       const rawLineContent = numMatch[2].trim();
-      const isStore =
-        rawLineContent.toLowerCase().includes('fashionhub') ||
-        rawLineContent.toLowerCase().includes('showroom');
-
-      if (isStore) {
-        const storeTitle = rawLineContent.replace(/[*_#]/g, '').trim();
-        nodes.push(
-          <div
-            key={`store-${i}`}
-            className="mt-3.5 first:mt-0 mb-1.5 flex items-center gap-2 pt-2.5 first:pt-0 border-t border-slate-200/70 first:border-0"
-          >
-            <span className="w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center shrink-0 bg-emerald-100 text-emerald-700">
-              <MapPin size={12} />
-            </span>
-            <span className="font-bold text-slate-900 text-sm">{storeTitle}</span>
-          </div>,
-        );
-        continue;
-      }
-
       // Extract bold product name if present, otherwise strip markdown
       const boldMatch = rawLineContent.match(/\*\*([^*]+)\*\*/);
       const linkMatch = rawLineContent.match(/\[([^\]]+)\]\([^)]+\)/);
@@ -392,46 +300,6 @@ export function FormattedChatMessage({
       const cleanVal = rawVal.replace(/\*\*/g, '').replace(/^\*|\*$/g, '').trim();
       const kLower = key.toLowerCase();
 
-      // Showroom address
-      if (kLower.includes('địa chỉ')) {
-        nodes.push(
-          <div
-            key={`kv-${i}`}
-            className="flex items-start gap-2 text-xs py-1 pl-2.5 ml-2 border-l-2 border-emerald-400 bg-emerald-50/30 rounded-r-md my-0.5"
-          >
-            <span className="font-semibold text-slate-700 min-w-16">📍 Địa chỉ:</span>
-            <span className="text-slate-800 font-medium leading-relaxed">{renderInline(cleanVal)}</span>
-          </div>,
-        );
-        continue;
-      }
-      // Showroom hours
-      if (kLower.includes('giờ') || kLower.includes('mở cửa')) {
-        nodes.push(
-          <div
-            key={`kv-${i}`}
-            className="flex items-center gap-2 text-xs py-0.5 pl-2.5 ml-2 border-l-2 border-emerald-400"
-          >
-            <span className="font-medium text-slate-500 min-w-16">🕒 Giờ mở cửa:</span>
-            <span className="text-slate-800 font-medium">{renderInline(cleanVal)}</span>
-          </div>,
-        );
-        continue;
-      }
-      // Showroom hotline
-      if (kLower.includes('hotline') || kLower.includes('điện thoại')) {
-        nodes.push(
-          <div
-            key={`kv-${i}`}
-            className="flex items-center gap-2 text-xs py-0.5 pl-2.5 ml-2 border-l-2 border-emerald-400"
-          >
-            <span className="font-medium text-slate-500 min-w-16">📞 Hotline:</span>
-            <span className="text-slate-800 font-medium">{renderInline(cleanVal)}</span>
-          </div>,
-        );
-        continue;
-      }
-
       if (kLower.includes('giá')) {
         nodes.push(
           <div
@@ -502,22 +370,6 @@ export function FormattedChatMessage({
     const bulletMatch = trimmed.match(/^[-*•]\s+(.*)$/);
     if (bulletMatch) {
       const contentText = bulletMatch[1];
-      // Store showroom header: "* **FashionHub Vincom Bà Triệu**"
-      if (contentText.includes('FashionHub') || contentText.includes('Showroom')) {
-        nodes.push(
-          <div
-            key={`store-header-${i}`}
-            className="mt-3.5 first:mt-0 mb-1 flex items-center gap-2 pt-2 first:pt-0 border-t border-slate-200/70 first:border-0"
-          >
-            <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-              <MapPin size={12} />
-            </span>
-            <span className="font-bold text-slate-900 text-sm">{renderInline(contentText)}</span>
-          </div>,
-        );
-        continue;
-      }
-
       // Check if bullet itself is a bold product name: "- **Áo Polo Regular...**"
       const boldProdMatch = contentText.match(/^\*\*([^*]+)\*\*$/);
       if (boldProdMatch) {
@@ -609,18 +461,7 @@ function useChatSession() {
     });
     setPending(true);
     try {
-      let location: { latitude: number; longitude: number } | undefined;
-      const wantsNearby = /(?:cửa hàng|chi nhánh|showroom).*(?:gần|quanh đây|ở đâu)|(?:gần|quanh đây).*(?:cửa hàng|chi nhánh|showroom)/i.test(content);
-      if (wantsNearby && navigator.geolocation) {
-        location = await new Promise((resolve) => {
-          navigator.geolocation.getCurrentPosition(
-            (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
-            () => resolve(undefined),
-            { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
-          );
-        });
-      }
-      const answer = await chatService.send(content, conversationId, location);
+      const answer = await chatService.send(content, conversationId);
       setMessages((items) => {
         const next = [...items, answer];
         writeLocal(storageKey, next);

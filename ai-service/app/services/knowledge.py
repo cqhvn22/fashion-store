@@ -11,6 +11,14 @@ EMBEDDING_INDEX_ID = f"{AI_EMBEDDING_MODEL}:ollama-v1"
 
 logger = logging.getLogger(__name__)
 
+RETIRED_STORE_POLICY_ID = UUID("00000000-0000-0000-0000-000000000004")
+RETIRED_STORE_POLICY_CONTENT = (
+    "Hệ thống showroom FashionHub hiện có mặt tại 10 chi nhánh trọng điểm trên toàn quốc, tích hợp bản đồ chỉ đường Google Maps: "
+    "Hà Nội (Vincom Bà Triệu, Aeon Mall Long Biên, 245 Cầu Giấy, Lotte Liễu Giai), "
+    "TP. Hồ Chí Minh (Saigon Centre Q1, Vincom Đồng Khởi Q1, Crescent Mall Q7, Vạn Hạnh Mall Q10), "
+    "Đà Nẵng (Vincom Plaza Ngô Quyền, 156 Nguyễn Văn Linh Hải Châu). Giờ mở cửa phục vụ: 9:00 - 22:00 tất cả các ngày trong tuần."
+)
+
 
 def response_rule(title: str, content: str) -> tuple[str, str] | None:
     """Recognize an administrator's exact-response rule without asking the LLM to obey it."""
@@ -43,8 +51,8 @@ DEFAULT_POLICIES = [
         "content": (
             "FashionHub hỗ trợ khách hàng đổi hàng trong vòng 7 ngày kể từ ngày nhận hàng thành công. "
             "Áp dụng cho mọi sản phẩm còn nguyên tem mác, chưa qua sử dụng, giặt ủi và có hóa đơn mua hàng. "
-            "Khách hàng có thể đổi size, đổi màu hoặc đổi sang sản phẩm khác bằng hoặc cao hơn giá trị tại bất kỳ showroom nào "
-            "trong hệ thống FashionHub trên toàn quốc hoặc gửi chuyển phát nhanh. Miễn phí đổi hàng nếu do lỗi sản xuất hoặc sai sót từ shop."
+            "Khách hàng có thể đổi size, đổi màu hoặc đổi sang sản phẩm khác bằng hoặc cao hơn giá trị qua dịch vụ vận chuyển "
+            "sau khi liên hệ bộ phận hỗ trợ. Miễn phí đổi hàng nếu do lỗi sản xuất hoặc sai sót từ shop."
         ),
         "source_url": "/policies/returns",
         "image_url": "/images/policy-returns.svg",
@@ -76,18 +84,6 @@ DEFAULT_POLICIES = [
         "image_url": "/images/policy-size.svg",
     },
     {
-        "id": UUID("00000000-0000-0000-0000-000000000004"),
-        "title": "Hệ thống 10 Showroom FashionHub toàn quốc",
-        "content": (
-            "Hệ thống showroom FashionHub hiện có mặt tại 10 chi nhánh trọng điểm trên toàn quốc, tích hợp bản đồ chỉ đường Google Maps: "
-            "Hà Nội (Vincom Bà Triệu, Aeon Mall Long Biên, 245 Cầu Giấy, Lotte Liễu Giai), "
-            "TP. Hồ Chí Minh (Saigon Centre Q1, Vincom Đồng Khởi Q1, Crescent Mall Q7, Vạn Hạnh Mall Q10), "
-            "Đà Nẵng (Vincom Plaza Ngô Quyền, 156 Nguyễn Văn Linh Hải Châu). Giờ mở cửa phục vụ: 9:00 - 22:00 tất cả các ngày trong tuần."
-        ),
-        "source_url": "/stores",
-        "image_url": "/images/policy-stores.svg",
-    },
-    {
         "id": UUID("00000000-0000-0000-0000-000000000005"),
         "title": "Cam kết chính hãng & Hotline 1800 6000",
         "content": (
@@ -109,8 +105,6 @@ def resolve_source_meta(title: str) -> tuple[str, str]:
         return "/policies/shipping", "/images/policy-shipping.svg"
     if any(k in t for k in ("chọn size", "bảng size", "kích cỡ", "size")):
         return "/size-guide", "/images/policy-size.svg"
-    if any(k in t for k in ("cửa hàng", "showroom", "chi nhánh", "stores", "bản đồ")):
-        return "/stores", "/images/policy-stores.svg"
     if any(k in t for k in ("bảo mật", "privacy")):
         return "/policies/privacy", "/images/policy-terms.svg"
     return "/policies/terms", "/images/policy-terms.svg"
@@ -128,19 +122,16 @@ def find_matching_policies(question: str) -> list[dict]:
     # size guide
     if any(k in q for k in ("chọn size", "bảng size", "tư vấn size", "cân nặng", "chiều cao", "mặc size gì", "size m", "size l", "size xl", "size 2xl", "size 3xl", "kích cỡ")):
         results.append({**DEFAULT_POLICIES[2], "score": 0.95})
-    # stores
-    if any(k in q for k in ("cửa hàng", "chi nhánh", "showroom", "địa chỉ", "bản đồ", "google map", "ở đâu", "hà nội", "hồ chí minh", "đà nẵng", "vincom")):
-        results.append({**DEFAULT_POLICIES[3], "score": 0.95})
     # terms / hotline
     if any(k in q for k in ("chính hãng", "bảo hành", "hóa đơn", "hotline", "tổng đài", "liên hệ", "điều khoản", "uy tín", "sđt")):
-        results.append({**DEFAULT_POLICIES[4], "score": 0.95})
+        results.append({**DEFAULT_POLICIES[3], "score": 0.95})
     if not results:
         return []
     try:
         with connection() as db:
             rows = db.execute(
                 "SELECT id,title,content FROM knowledge_documents "
-                "WHERE id = ANY(%s) AND is_active AND status='INDEXED'",
+                "WHERE id = ANY(%s) AND is_active",
                 ([item["id"] for item in results],),
             ).fetchall()
         current = {row["id"]: row for row in rows}
@@ -195,6 +186,23 @@ def index_document(document_id: UUID, content: str) -> None:
 def seed_default_policies() -> None:
     try:
         with connection() as db:
+            db.execute(
+                "DELETE FROM knowledge_documents WHERE id=%s AND content=%s",
+                (RETIRED_STORE_POLICY_ID, RETIRED_STORE_POLICY_CONTENT),
+            )
+            db.execute(
+                "UPDATE knowledge_documents SET is_active=false,updated_at=now() "
+                "WHERE id=%s AND is_active",
+                (RETIRED_STORE_POLICY_ID,),
+            )
+            old_return = ("tại bất kỳ showroom nào trong hệ thống FashionHub trên toàn quốc "
+                          "hoặc gửi chuyển phát nhanh.")
+            new_return = "qua dịch vụ vận chuyển sau khi liên hệ bộ phận hỗ trợ."
+            db.execute(
+                "UPDATE knowledge_documents SET content=replace(content,%s,%s),"
+                "status='PENDING',updated_at=now() WHERE id=%s AND content LIKE %s",
+                (old_return, new_return, UUID("00000000-0000-0000-0000-000000000001"), f"%{old_return}%"),
+            )
             for item in DEFAULT_POLICIES:
                 db.execute(
                     "INSERT INTO knowledge_documents (id, title, content, status) "

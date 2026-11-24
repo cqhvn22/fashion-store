@@ -1,4 +1,4 @@
-# Thành viên, ưu đãi và trợ lý cửa hàng
+# Thành viên, ưu đãi và trợ lý AI
 
 ## Tích điểm và xếp hạng
 
@@ -10,7 +10,7 @@ Admin có thể tạo ưu đãi cho tất cả hoặc một hạng cụ thể, c
 
 ## Trợ lý AI
 
-Frontend chỉ gọi `navigator.geolocation` khi câu hỏi tìm cửa hàng gần đây. Tọa độ được gửi riêng trong yêu cầu chat, không ghi vào lịch sử hội thoại. AI service dùng khoảng cách đường chim bay để xếp hạng cửa hàng; nếu khách từ chối quyền vị trí, trợ lý hỏi tỉnh/thành phố hoặc khu vực và lọc theo văn bản. Danh sách cửa hàng và tọa độ hiện là **dữ liệu mẫu**; trước khi vận hành thực tế cần xác minh vị trí và thông tin cửa hàng.
+Trợ lý không yêu cầu vị trí của khách và không tra cứu cửa hàng vật lý. Nếu khách hỏi về chi nhánh hoặc địa điểm mua trực tiếp, trợ lý giải thích rằng FashionHub hiện hỗ trợ mua sắm trực tuyến và hướng dẫn xem sản phẩm hoặc liên hệ hỗ trợ.
 
 Với khách đã đăng nhập, AI service gọi nội bộ Order service bằng `X-Internal-Key` để lấy hạng, điểm và ưu đãi đang hiệu lực. Ngữ cảnh này đi vào lời nhắc cho OpenRouter. Model không được tự tạo ưu đãi hoặc giá.
 

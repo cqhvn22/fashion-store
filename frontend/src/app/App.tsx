@@ -138,8 +138,6 @@ export function App() {
         <Route path="/ai-assistant" element={<ChatPage />} />
         <Route path="/about" element={<ContentPage name="about" />} />
         <Route path="/contact" element={<ContentPage name="contact" />} />
-        <Route path="/stores" element={<ContentPage name="stores" />} />
-        <Route path="/he-thong-cua-hang" element={<ContentPage name="stores" />} />
         <Route path="/policies/shipping" element={<ContentPage name="shipping" />} />
         <Route path="/policies/returns" element={<ContentPage name="returns" />} />
         <Route path="/policies/privacy" element={<ContentPage name="privacy" />} />
