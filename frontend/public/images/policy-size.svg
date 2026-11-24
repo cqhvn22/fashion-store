@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <rect width="120" height="120" rx="16" fill="#F0FDF4"/>
+  <circle cx="60" cy="60" r="42" fill="#FFFFFF"/>
+  <path d="M40 70l40-40" stroke="#16A34A" stroke-width="8" stroke-linecap="round"/>
+  <path d="M47 57l6-6M57 47l6-6M67 37l6-6" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+  <text x="60" y="92" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="bold" font-size="12" fill="#16A34A">SIZE M-3XL</text>
+</svg>

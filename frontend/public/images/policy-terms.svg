@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <rect width="120" height="120" rx="16" fill="#F5F3FF"/>
+  <circle cx="60" cy="60" r="42" fill="#FFFFFF"/>
+  <path d="M60 38l18 7v16c0 14-8 23-18 27-10-4-18-13-18-27V45l18-7z" fill="#7C3AED"/>
+  <path d="M52 61l6 6 12-12" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="60" y="103" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="bold" font-size="11" fill="#6D28D9">CHÍNH HÃNG 100%</text>
+</svg>

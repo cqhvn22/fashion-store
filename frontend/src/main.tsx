@@ -3,10 +3,26 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './app/App';
+import { setupGlobalSync } from './services/sync';
+import { useAuthStore } from './stores/authStore';
 import './styles.css';
+
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, staleTime: 60_000 } },
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+  },
 });
+
+setupGlobalSync(queryClient);
+useAuthStore.subscribe((state, previous) => {
+  if (state.user?.id !== previous.user?.id) queryClient.clear();
+});
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>

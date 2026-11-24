@@ -1,0 +1,12 @@
+[
+  {"question": "Áo Nỉ Basic Vải Xốp Loose L.3.7795", "expected_slug": "ao-ni-basic-vai-xop-loose-l.3.7795-p37939753"},
+  {"question": "Áo Sơ Mi Cộc Loose L.1.4922", "expected_slug": "ao-so-mi-coc-loose-l.1.4922-p37937417"},
+  {"question": "Áo Phông Regular L.4.2797", "expected_slug": "ao-phong-regular-l.4.2797-p37935694"},
+  {"question": "Quần KaKi Loose 30.4.QKK019", "expected_slug": "quan-kaki-loose-30.4.qkk019-p37937148"},
+  {"question": "Dây Lưng Atino Da Bò 9905", "expected_slug": "that-lung-2v-bac-1.9905-p37717662"},
+  {"question": "áo mát dưới 200k", "expected_terms": ["áo", "cộc"], "max_price": 200000},
+  {"question": "quần jeans dưới 300k", "expected_terms": ["quần", "jeans"], "max_price": 300000},
+  {"question": "dây lưng da bò", "expected_terms": ["dây lưng", "da bò"]},
+  {"question": "áo khoác gió", "expected_terms": ["áo khoác", "gió"]},
+  {"question": "áo xanh neon dưới 1000đ size 4XL", "expect_empty": true}
+]

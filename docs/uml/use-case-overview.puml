@@ -1,0 +1,45 @@
+@startuml
+title FashionHub - Biểu đồ use case tổng quan
+left to right direction
+skinparam shadowing false
+
+actor "Khách truy cập" as Guest
+actor "Khách hàng" as Customer
+actor "Quản trị viên" as Admin
+Customer --|> Guest
+Admin --|> Customer
+
+rectangle "Hệ thống FashionHub" {
+  usecase "Khám phá sản phẩm" as Browse
+  usecase "Tìm kiếm và lọc sản phẩm" as Search
+  usecase "Quản lý giỏ hàng" as Cart
+  usecase "Lưu sản phẩm yêu thích" as Wishlist
+  usecase "Xem thông tin và chính sách" as Info
+  usecase "Đăng ký / đăng nhập" as Auth
+  usecase "Nhận tư vấn mua sắm" as Chat
+  usecase "Quản lý tài khoản" as Account
+  usecase "Đặt hàng COD" as Checkout
+  usecase "Theo dõi và hủy đơn" as MyOrders
+  usecase "Quản lý sản phẩm và danh mục" as ManageCatalog
+  usecase "Quản lý tồn kho" as ManageStock
+  usecase "Quản lý đơn hàng" as ManageOrders
+  usecase "Quản lý tri thức AI" as ManageKnowledge
+  usecase "Xem báo cáo và người dùng" as Reports
+}
+
+Guest --> Browse
+Guest --> Search
+Guest --> Cart
+Guest --> Wishlist
+Guest --> Info
+Guest --> Auth
+Guest --> Chat
+Customer --> Account
+Customer --> Checkout
+Customer --> MyOrders
+Admin --> ManageCatalog
+Admin --> ManageStock
+Admin --> ManageOrders
+Admin --> ManageKnowledge
+Admin --> Reports
+@enduml
