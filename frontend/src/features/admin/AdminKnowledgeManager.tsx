@@ -91,7 +91,7 @@ export function AdminKnowledgeManager() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold">Tri thức sản phẩm</h2>
-          <p className="mt-1 text-sm text-slate-600">Đồng bộ sản phẩm từ cửa hàng và bộ dữ liệu sản phẩm cho trợ lý.</p>
+          <p className="mt-1 text-sm text-slate-600">Đồng bộ sản phẩm đang bán từ cơ sở dữ liệu cửa hàng cho trợ lý.</p>
         </div>
         <button className="btn-outline flex items-center gap-2"
           disabled={busy || refreshing || productQuery.isPending || productQuery.isError}
@@ -104,15 +104,15 @@ export function AdminKnowledgeManager() {
       {productQuery.isPending ? <p className="mt-4 text-sm text-slate-600" role="status">Đang tải dữ liệu sản phẩm…</p> :
        productQuery.isError ? <div className="mt-4"><ErrorState error={productQuery.error} retry={() => void productQuery.refetch()} /></div> :
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl bg-slate-50 p-4"><p className="text-sm text-slate-500">Sản phẩm cửa hàng</p>
+          <div className="rounded-xl bg-slate-50 p-4"><p className="text-sm text-slate-500">Sản phẩm trong Catalog</p>
+            <strong className="text-2xl">{product?.catalog?.total ?? '—'}</strong></div>
+          <div className="rounded-xl bg-slate-50 p-4"><p className="text-sm text-slate-500">Đã lập chỉ mục cho AI</p>
             <strong className="text-2xl">{product?.documents?.catalog ?? '—'}</strong></div>
-          <div className="rounded-xl bg-slate-50 p-4"><p className="text-sm text-slate-500">Sản phẩm từ bộ dữ liệu</p>
-            <strong className="text-2xl">{product?.documents?.workbook ?? '—'}</strong></div>
           <div className="rounded-xl bg-slate-50 p-4"><p className="text-sm text-slate-500">Cập nhật gần nhất</p>
             <strong className="text-sm">{product?.last_sync ? formatDate(product.last_sync) : 'Chưa cập nhật'}</strong></div>
         </div>}
       {product?.error && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900" role="alert">
-        Một nguồn dữ liệu chưa cập nhật được: {product.error}</p>}
+        Chưa cập nhật được sản phẩm: {product.error}</p>}
       {refreshing && <p className="mt-3 text-sm text-slate-600" role="status">Đang đối chiếu thay đổi và cập nhật thông tin sản phẩm…</p>}
     </section>
 

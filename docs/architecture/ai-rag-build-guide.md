@@ -4,11 +4,11 @@ Tài liệu mô tả hệ thống đang chạy ngày 15/11/2026. Lệnh PowerShe
 
 ## 1. Chuẩn bị dữ liệu
 
-- `ai-service/atino_products.xlsx`: snapshot ATINO, 280 sản phẩm trong lần kiểm tra này.
-- Catalog nội bộ `/api/v1/internal/ai-products`: dữ liệu sản phẩm cửa hàng mới hơn; khi trùng slug, Catalog được ưu tiên.
+- `ai-service/atino_products.xlsx`: file dùng để nhập dữ liệu ATINO ban đầu vào Catalog DB; không được đọc trong luồng AI đang chạy.
+- Catalog nội bộ `/api/v1/internal/ai-products`: nguồn sản phẩm duy nhất của chỉ mục AI, đọc từ Catalog DB.
 - `knowledge_documents`: tài liệu/chính sách do admin quản lý. Quy tắc “Nếu user nói… / Trả lời là…” là luồng phản hồi chính xác riêng.
 
-`app/ingestion/workbook.py` chuẩn hóa Unicode/khoảng trắng, kiểm tra cột, ID, giá và dòng trùng; tách màu, size và làm sạch dữ liệu ảnh. Kiểm tra chất lượng workbook sau mỗi lần thay file.
+`app/ingestion/workbook.py` phục vụ bước nhập ban đầu. Mọi cập nhật về sản phẩm sau đó thực hiện trong Catalog DB qua giao diện/API quản trị; AI đồng bộ từ feed Catalog.
 
 ## 2. Cấu hình provider
 
@@ -55,4 +55,4 @@ Bộ `ai-service/eval/retrieval_cases.json` kiểm tra top 5, câu hỏi tự nh
 
 ## 6. Hướng mở rộng
 
-Benchmark rồi cân nhắc pgvector/HNSW khi corpus tăng. Lưu trạng thái đồng bộ vào DB/queue bền vững; ghi request ID, model trả về thực tế, số nguồn và thời gian xử lý mà không log khóa/dữ liệu cá nhân. Thử prompt injection theo [OWASP LLM01](https://genai.owasp.org/llmrisk/llm01-prompt-injection/). Kiểm soát xung đột Catalog/workbook để sản phẩm đã gỡ không quay lại từ snapshot.
+Benchmark rồi cân nhắc pgvector/HNSW khi corpus tăng. Lưu trạng thái đồng bộ vào DB/queue bền vững; ghi request ID, model trả về thực tế, số nguồn và thời gian xử lý mà không log khóa/dữ liệu cá nhân. Thử prompt injection theo [OWASP LLM01](https://genai.owasp.org/llmrisk/llm01-prompt-injection/). Kiểm chứng sản phẩm đã gỡ khỏi Catalog cũng biến mất khỏi chỉ mục AI.

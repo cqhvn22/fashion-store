@@ -22,6 +22,7 @@ def migrate() -> None:
             (2, "V2__product_documents.sql"),
             (3, "V3__chat_source_image_url.sql"),
             (4, "V4__knowledge_management.sql"),
+            (5, "V5__catalog_only_product_knowledge.sql"),
         ):
             exists = db.execute("SELECT 1 FROM schema_migrations WHERE version=%s", (version,)).fetchone()
             if exists is None:

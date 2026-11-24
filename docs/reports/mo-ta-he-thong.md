@@ -73,7 +73,7 @@ Khách đã mua sản phẩm có thể gửi đánh giá theo điều kiện đ�
 
 ### 4.4. Trợ lý tư vấn
 
-Tài liệu tư vấn được quản trị viên thêm/sửa/ẩn và lập chỉ mục theo đoạn. Dữ liệu sản phẩm được đồng bộ từ Catalog; workbook ATINO là nguồn nhập ban đầu và chỉ mục đối chiếu riêng. Khi người dùng hỏi về sản phẩm, hệ thống lọc và xếp hạng ứng viên rồi lấy giá/tồn kho trực tiếp từ Catalog trước khi gửi ngữ cảnh tới mô hình OpenRouter. Hội thoại và nguồn tham khảo được lưu để hỗ trợ câu hỏi tiếp theo. Một số tình huống có nhánh xử lý xác định, ví dụ quy tắc trả lời do quản trị viên cấu hình, đếm số sản phẩm từ Catalog, hoặc tìm cửa hàng dựa trên vị trí. Phần quy trình AI được trình bày chi tiết tại [quy-trinh-xay-dung-rag.md](quy-trinh-xay-dung-rag.md).
+Tài liệu tư vấn được quản trị viên thêm/sửa/ẩn và lập chỉ mục theo đoạn. Dữ liệu sản phẩm được đồng bộ từ Catalog; workbook ATINO chỉ dùng để nhập dữ liệu ban đầu, không được lập chỉ mục riêng trong lúc vận hành. Khi người dùng hỏi về sản phẩm, hệ thống lọc và xếp hạng ứng viên rồi lấy giá/tồn kho trực tiếp từ Catalog trước khi gửi ngữ cảnh tới mô hình OpenRouter. Hội thoại và nguồn tham khảo được lưu để hỗ trợ câu hỏi tiếp theo. Một số tình huống có nhánh xử lý xác định, ví dụ quy tắc trả lời do quản trị viên cấu hình, đếm số sản phẩm từ Catalog, hoặc tìm cửa hàng dựa trên vị trí. Phần quy trình AI được trình bày chi tiết tại [quy-trinh-xay-dung-rag.md](quy-trinh-xay-dung-rag.md).
 
 ## 5. Thiết kế dữ liệu và bảo mật
 

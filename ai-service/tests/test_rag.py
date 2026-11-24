@@ -1,24 +1,36 @@
 import json
-import os
 import unittest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from app.ingestion.workbook import load_products
 from app.services.model import choose_products
-from app.services.products import _budget, _requested_color, _requested_size, _requested_types, document_text
+from app.services.products import (_budget, _requested_color, _requested_size,
+                                   _requested_types, document_text, sync_all, sync_status)
 
 
-class WorkbookTests(unittest.TestCase):
-    def test_dataset_is_cleaned_without_repeated_policy(self):
-        source = Path(os.environ.get("WORKBOOK_PATH", str(Path(__file__).resolve().parents[1] / "atino_products.xlsx")))
-        records, report = load_products(source)
-        self.assertEqual(report["rows"], 280)
-        self.assertEqual(report["valid"], 280)
-        self.assertEqual(report["duplicate_ids"], 0)
-        self.assertEqual(report["product_descriptions"], 0)
-        self.assertTrue(all(item["price"] > 0 for item in records))
-        self.assertNotIn("Đổi hàng trong vòng", document_text(records[0]))
+class ProductIndexTests(unittest.TestCase):
+    def test_catalog_product_text(self):
+        text = document_text({"name": "Áo khoác", "category": "Áo nam", "price": 200000,
+                              "source": "catalog", "in_stock": True})
+        self.assertIn("Giá: 200,000 VNĐ", text)
+        self.assertIn("Tình trạng: còn hàng", text)
+
+    @patch("app.services.products.replace_source")
+    @patch("app.services.products.catalog_records")
+    def test_sync_reads_catalog_only(self, records, replace):
+        records.return_value = [{"source": "catalog", "source_id": "1"}]
+        replace.return_value = {"total": 1, "indexed": 0, "deleted": 0}
+        result = sync_all()
+        replace.assert_called_once_with("catalog", records.return_value)
+        self.assertNotIn("workbook", result)
+        self.assertIsNone(result["error"])
+        self.assertEqual(result["catalog"]["total"], 1)
+
+    @patch("app.services.products.catalog_records", side_effect=RuntimeError("unavailable"))
+    def test_failed_sync_keeps_last_success_time(self, _records):
+        previous = sync_status["last_sync"]
+        result = sync_all()
+        self.assertEqual(result["last_sync"], previous)
+        self.assertIn("catalog: unavailable", result["error"])
 
     def test_budget_units(self):
         self.assertEqual(_budget("áo nỉ dưới 200k"), 200_000)

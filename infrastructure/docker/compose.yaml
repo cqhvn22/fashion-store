@@ -127,7 +127,6 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       CATALOG_SERVICE_URL: http://catalog-service:8082
       ORDER_SERVICE_URL: http://order-service:8083
-      WORKBOOK_PATH: /data/atino_products.xlsx
       PRODUCT_SYNC_SECONDS: ${PRODUCT_SYNC_SECONDS:-90}
       AI_API_KEY: ${AI_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
@@ -139,7 +138,6 @@ services:
       postgres: {condition: service_healthy}
       catalog-service: {condition: service_started}
     ports: ["8000:8000"]
-    volumes: ["../../ai-service/atino_products.xlsx:/data/atino_products.xlsx:ro"]
 volumes:
   postgres_data:
   kafka_data:

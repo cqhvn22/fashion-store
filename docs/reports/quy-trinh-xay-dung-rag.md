@@ -8,9 +8,9 @@ Trợ lý phục vụ tìm sản phẩm theo loại, màu, size, giá và nhu c�
 
 ```mermaid
 flowchart LR
-    W[ATINO .xlsx] --> P[Tiền xử lý]
-    C[Catalog API] --> S[Đồng bộ tăng dần]
-    P --> S
+    W[ATINO .xlsx nhập ban đầu] --> C[(Catalog DB)]
+    C --> F[Catalog API nội bộ]
+    F --> S[Đồng bộ tăng dần]
     D[Tài liệu quản trị] --> CH[Chia đoạn]
     S --> E[Ollama embedding]
     CH --> E
@@ -24,13 +24,13 @@ flowchart LR
 
 ## 2. Thu thập và làm sạch dữ liệu
 
-Nguồn ban đầu là `ai-service/atino_products.xlsx`. Bộ đọc Excel kiểm tra các cột bắt buộc: `Product ID`, `Tên sản phẩm`, `Danh mục`, `Giá bán (VNĐ)`. Các bước tiền xử lý gồm chuẩn hóa Unicode và khoảng trắng; loại dòng thiếu ID số, tên, danh mục hoặc giá hợp lệ; bỏ ID trùng; chuẩn hóa giá về số nguyên đồng; tách và loại trùng màu/size; kiểm tra slug và tên file ảnh; rút thông tin chất liệu khi có thể; bỏ phần mô tả chỉ lặp chính sách vận chuyển/đổi trả để không biến chính sách thành đặc tính riêng của sản phẩm. Báo cáo chất lượng ghi số dòng, số hợp lệ, số loại và số ID trùng. Bảng tính được nhập vào Catalog để trở thành dữ liệu sản phẩm giao dịch; chỉ mục workbook được giữ riêng để theo dõi nguồn.
+Nguồn nhập ban đầu là `ai-service/atino_products.xlsx`. Bộ đọc Excel kiểm tra các cột bắt buộc: `Product ID`, `Tên sản phẩm`, `Danh mục`, `Giá bán (VNĐ)`. Các bước tiền xử lý gồm chuẩn hóa Unicode và khoảng trắng; loại dòng thiếu ID số, tên, danh mục hoặc giá hợp lệ; bỏ ID trùng; chuẩn hóa giá về số nguyên đồng; tách và loại trùng màu/size; kiểm tra slug và tên file ảnh; rút thông tin chất liệu khi có thể; bỏ phần mô tả chỉ lặp chính sách vận chuyển/đổi trả để không biến chính sách thành đặc tính riêng của sản phẩm. Báo cáo chất lượng ghi số dòng, số hợp lệ, số loại và số ID trùng. Bảng tính chỉ dùng để nhập vào Catalog DB ban đầu; dữ liệu sản phẩm vận hành được quản trị tại Catalog DB.
 
 Sản phẩm do khách có thể mua được lấy qua API nội bộ phân trang của Catalog. Bản ghi đưa vào chỉ mục có ID, tên, danh mục, giá, giá gốc, màu, size, mô tả, ảnh, đường dẫn và tình trạng còn hàng. Tài liệu chính sách/hướng dẫn do quản trị viên quản lý nằm trong `knowledge_documents`, tách với sản phẩm. Một số chính sách mặc định được khởi tạo để hệ thống có tri thức cơ bản.
 
 ## 3. Tạo và cập nhật chỉ mục
 
-Mỗi sản phẩm được tạo thành một đoạn văn ngắn gồm tên, danh mục, giá, biến thể và mô tả. Hệ thống tính SHA-256 từ dữ liệu đã chuẩn hóa và nội dung; chỉ tạo embedding lại nếu hash hoặc định danh mô hình embedding đổi. Sản phẩm mới được thêm, sản phẩm thay đổi được cập nhật và ID không còn trong nguồn được xóa khỏi chỉ mục nguồn đó. Công việc này chạy định kỳ (mặc định **90 giây**), có nút cập nhật tri thức sản phẩm cho quản trị viên và có thể được Catalog yêu cầu chạy lại khi dữ liệu sản phẩm thay đổi. Chỉ mục `workbook` và `catalog` có khóa nguồn riêng; lúc tư vấn hàng đang bán chỉ truy vấn `source='catalog'`.
+Mỗi sản phẩm được tạo thành một đoạn văn ngắn gồm tên, danh mục, giá, biến thể và mô tả. Hệ thống tính SHA-256 từ dữ liệu đã chuẩn hóa và nội dung; chỉ tạo embedding lại nếu hash hoặc định danh mô hình embedding đổi. Sản phẩm mới được thêm, sản phẩm thay đổi được cập nhật và ID không còn trong Catalog được xóa khỏi chỉ mục. Công việc này chạy định kỳ (mặc định **90 giây**), có nút cập nhật tri thức sản phẩm cho quản trị viên và có thể được Catalog yêu cầu chạy lại khi dữ liệu sản phẩm thay đổi. Chỉ mục sản phẩm duy nhất có `source='catalog'`; migration V5 xóa chỉ mục workbook cũ.
 
 Tài liệu tư vấn được chuẩn hóa khoảng trắng rồi chia thành đoạn **800 ký tự, chồng lấn 120 ký tự**; mỗi đoạn có embedding, ID tài liệu, vị trí đoạn và trạng thái lập chỉ mục. Khi tài liệu đổi, các đoạn cũ được thay bằng các đoạn mới sau khi tạo embedding thành công. Quản trị viên có thể thêm, sửa, ẩn/hiện, xóa và lập chỉ mục lại; hệ thống ghi trạng thái `INDEXED`/`FAILED` cùng lỗi gần nhất. PostgreSQL lưu vector trong cột `DOUBLE PRECISION[]`; bản hiện tại chưa dùng `pgvector` hoặc chỉ mục ANN.
 
@@ -54,7 +54,7 @@ Nếu người dùng đăng nhập, AI gọi API nội bộ Order để lấy h�
 
 ## 6. Vận hành, kiểm thử và giới hạn
 
-Quản trị viên theo dõi số tài liệu Catalog/workbook, trạng thái đồng bộ, lỗi gần nhất và trạng thái tài liệu tri thức. Những kiểm thử cần đưa vào báo cáo gồm: số sản phẩm Catalog bằng số bản ghi chỉ mục Catalog sau đồng bộ; thêm/sửa/xóa sản phẩm làm thay đổi chỉ mục; giá/khuyến mãi cập nhật được dùng khi trả lời; câu hỏi nhiều lượt về size; câu hỏi ngoài phạm vi; nguồn tham khảo hợp lệ; phân quyền tài liệu và hội thoại; lỗi Ollama/OpenRouter/Catalog được báo rõ. Các tệp kiểm thử hiện có nằm tại `ai-service/tests/` và `ai-service/eval/`. Cần chạy và ghi lại kết quả cụ thể khi chốt báo cáo; tài liệu này không khẳng định một tỷ lệ chính xác RAG chưa được đo.
+Quản trị viên theo dõi số sản phẩm Catalog, số bản ghi đã lập chỉ mục, trạng thái đồng bộ, lỗi gần nhất và trạng thái tài liệu tri thức. Những kiểm thử cần đưa vào báo cáo gồm: số sản phẩm Catalog bằng số bản ghi chỉ mục Catalog sau đồng bộ; thêm/sửa/xóa sản phẩm làm thay đổi chỉ mục; giá/khuyến mãi cập nhật được dùng khi trả lời; câu hỏi nhiều lượt về size; câu hỏi ngoài phạm vi; nguồn tham khảo hợp lệ; phân quyền tài liệu và hội thoại; lỗi Ollama/OpenRouter/Catalog được báo rõ. Các tệp kiểm thử hiện có nằm tại `ai-service/tests/` và `ai-service/eval/`. Cần chạy và ghi lại kết quả cụ thể khi chốt báo cáo; tài liệu này không khẳng định một tỷ lệ chính xác RAG chưa được đo.
 
 Giới hạn hiện tại là tính cosine bằng cách duyệt vector trong Python, chi phí tăng theo số tài liệu; truy xuất phụ thuộc embedding Ollama; chưa có đánh giá thực nghiệm với bộ câu hỏi được gán nhãn đầy đủ, chưa có reranker riêng, và dữ liệu cửa hàng mẫu chưa đại diện mạng lưới thực tế. Hướng mở rộng là chuyển sang chỉ mục vector có ANN, thêm quy trình đo Recall@k và độ đúng của câu trả lời/nguồn, giám sát độ trễ và lỗi theo từng bước, cùng cơ chế versioning tri thức để truy vết thay đổi.
 
@@ -62,7 +62,7 @@ Giới hạn hiện tại là tính cosine bằng cách duyệt vector trong Pyt
 
 | Bước | Mã nguồn hoặc dữ liệu |
 |---|---|
-| Đọc và chuẩn hóa workbook | `ai-service/app/ingestion/workbook.py`, `ai-service/atino_products.xlsx` |
+| Nhập và chuẩn hóa dữ liệu ban đầu | `ai-service/app/ingestion/workbook.py`, `ai-service/atino_products.xlsx` |
 | Đồng bộ sản phẩm và truy xuất | `ai-service/app/services/products.py` |
 | Tài liệu tư vấn và chia đoạn | `ai-service/app/services/knowledge.py` |
 | Ollama embedding, OpenRouter chat | `ai-service/app/services/model.py` |

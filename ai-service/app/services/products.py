@@ -1,4 +1,4 @@
-"""Incremental product RAG index from the workbook and live Catalog service."""
+"""Incremental product RAG index from the live Catalog service."""
 
 from __future__ import annotations
 
@@ -8,21 +8,18 @@ import math
 import re
 import threading
 from datetime import datetime, timezone
-from pathlib import Path
 from uuid import UUID, uuid5, NAMESPACE_URL
 
 import httpx
 
 from app.core.db import connection
-from app.core.settings import (AI_EMBEDDING_MODEL, CATALOG_SERVICE_URL,
-                               INTERNAL_API_KEY, WORKBOOK_PATH)
-from app.ingestion.workbook import load_products
+from app.core.settings import AI_EMBEDDING_MODEL, CATALOG_SERVICE_URL, INTERNAL_API_KEY
 from app.services.model import embed
 
 EMBEDDING_INDEX_ID = f"{AI_EMBEDDING_MODEL}:ollama-v1"
 
 _lock = threading.Lock()
-sync_status: dict = {"workbook": None, "catalog": None, "last_sync": None,
+sync_status: dict = {"catalog": None, "last_sync": None,
                      "started_at": None, "running": False, "queued": False, "error": None}
 
 
@@ -41,15 +38,13 @@ def document_text(item: dict) -> str:
         lines.append("Mô tả: " + item["description"][:800])
     if item.get("in_stock") is False:
         lines.append("Tình trạng: hết hàng")
-    elif item["source"] == "workbook":
-        lines.append("Tồn kho: chỉ là trạng thái tại thời điểm lập bảng tính")
     else:
         lines.append("Tình trạng: còn hàng")
     return "\n".join(lines)
 
 
 def replace_source(source: str, records: list[dict]) -> dict:
-    if source not in {"workbook", "catalog"}:
+    if source != "catalog":
         raise ValueError("Unsupported source")
     if any(record.get("source") != source for record in records):
         raise ValueError("Source mismatch")
@@ -155,22 +150,17 @@ def catalog_product_count() -> tuple[int, bool]:
 def sync_all() -> dict:
     if not _lock.acquire(blocking=False):
         return {**sync_status, "busy": True}
-    errors = []
     try:
         sync_status["queued"] = False
         sync_status["running"] = True
         sync_status["started_at"] = datetime.now(timezone.utc).isoformat()
         try:
-            workbook, report = load_products(Path(WORKBOOK_PATH))
-            sync_status["workbook"] = {**replace_source("workbook", workbook), "quality": report}
-        except Exception as error:
-            errors.append(f"workbook: {error}")
-        try:
             sync_status["catalog"] = replace_source("catalog", catalog_records())
         except Exception as error:
-            errors.append(f"catalog: {error}")
-        sync_status["last_sync"] = datetime.now(timezone.utc).isoformat()
-        sync_status["error"] = "; ".join(errors) or None
+            sync_status["error"] = f"catalog: {error}"
+        else:
+            sync_status["last_sync"] = datetime.now(timezone.utc).isoformat()
+            sync_status["error"] = None
         return dict(sync_status)
     finally:
         sync_status["running"] = False

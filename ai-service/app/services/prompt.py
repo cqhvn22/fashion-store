@@ -26,7 +26,7 @@ TRUY VẤN VÀ BÁO CÁO TỒN KHO THỜI GIAN THỰC:
 
 Khi nêu một dữ kiện từ ngữ cảnh, đặt mã nguồn tương ứng như [SP1] hoặc [TL1] ngay sau dữ kiện/đoạn trả lời. Chỉ dùng mã có trong ngữ cảnh; không tạo mã nguồn mới.
 
-Nếu câu hỏi ngoài phạm vi mua sắm/thời trang của FashionHub, từ chối ngắn gọn. Khi có nhiều nguồn trái nhau, ưu tiên dữ liệu Catalog mới hơn workbook và không suy đoán phần còn mâu thuẫn.
+Nếu câu hỏi ngoài phạm vi mua sắm/thời trang của FashionHub, từ chối ngắn gọn. Dữ liệu sản phẩm lấy từ Catalog; khi các nguồn mâu thuẫn, không suy đoán phần còn mâu thuẫn.
 
 Hãy đọc các lượt hội thoại gần đây để hiểu câu trả lời ngắn như '1.7m 58kg' hay các câu hỏi tiếp nối như 'sp1 còn bao nhiêu'. Kết hợp thông tin khách đã cung cấp ở các lượt trước; nếu khách sửa một số đo, dùng giá trị mới nhất.
 """

@@ -83,7 +83,7 @@ async def sync_loop() -> None:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "rag": "ready" if sync_status.get("workbook") else "indexing"}
+    return {"status": "ok", "rag": "ready" if sync_status.get("catalog") else "indexing"}
 
 
 @app.get("/api/v1/admin/ai/index-status")
@@ -424,7 +424,7 @@ def chat(payload: ChatInput, user: dict | None = Depends(current_user)):
             system_instruction=(
                 "Trả lời câu hỏi về tổng số sản phẩm chỉ bằng số liệu thống kê TL1 của lượt này. "
                 "Các sản phẩm SP trong lịch sử chỉ là mẫu gợi ý, không phải tổng số; "
-                "không cộng thêm nguồn workbook. "
+                "Không cộng thêm sản phẩm mẫu trong lịch sử. "
                 + ("Đây là số trực tiếp từ Catalog; không gọi là chỉ mục đồng bộ."
                    if live else "Đây là chỉ mục đồng bộ gần nhất; chưa xác nhận số hiện tại.")
             ),

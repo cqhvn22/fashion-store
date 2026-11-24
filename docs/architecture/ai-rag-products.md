@@ -1,15 +1,15 @@
-# RAG tư vấn sản phẩm ATINO
+# RAG tư vấn sản phẩm từ Catalog DB
 
 ## Nguồn và tiền xử lý
 
-`ai-service/atino_products.xlsx` có 280 dòng sản phẩm, 22 cột. `app.ingestion.workbook` đọc XLSX, kiểm tra Product ID duy nhất, tên, danh mục và giá dương; chuẩn hóa Unicode, khoảng trắng, màu/size, đường dẫn ảnh và URL sản phẩm. Kết quả có báo cáo số dòng hợp lệ, bị loại và trùng ID.
+`ai-service/atino_products.xlsx` là nguồn nhập **một lần** để khởi tạo dữ liệu ATINO trong Catalog DB. `app.ingestion.workbook` vẫn hỗ trợ kiểm tra file nhập, nhưng AI service không đọc XLSX khi chạy hoặc khi quản trị viên cập nhật tri thức.
 
-Trường “Mô tả sản phẩm” của nguồn hiện chủ yếu là chính sách giao/đổi hàng lặp lại. Pipeline loại phần đó khỏi văn bản sản phẩm; chỉ lấy chất liệu khi SKU ghi rõ thành phần phần trăm. Không tự suy ra chất liệu, số lượng tồn hay chất lượng từ tên ảnh. Giá và tình trạng hàng của workbook là dữ liệu tại thời điểm lập bảng; chatbot cần nói rõ khi người dùng hỏi về hàng còn bán.
+Trường “Mô tả sản phẩm” trong file nhập ban đầu chủ yếu là chính sách giao/đổi hàng lặp lại; bộ nhập loại phần đó trước khi ghi vào Catalog. AI chỉ dùng sản phẩm hiện có trong Catalog DB. Không tự suy ra chất liệu, số lượng tồn hay chất lượng từ tên ảnh.
 
-Chạy tiền xử lý thủ công trong container AI:
+Nếu cần kiểm tra lại file nhập ban đầu, chạy thủ công từ thư mục `ai-service` có file XLSX:
 
 ```powershell
-docker compose -p fashion-codex --env-file .env -f infrastructure/docker/compose.yaml exec ai-service python -m app.ingestion.workbook --input /data/atino_products.xlsx --output /tmp/atino-clean.json
+python -m app.ingestion.workbook --input atino_products.xlsx --output atino-clean.json
 ```
 
 ## Mô hình và chỉ mục
@@ -21,9 +21,9 @@ docker compose -p fashion-codex --env-file .env -f infrastructure/docker/compose
 
 ## Đồng bộ thêm, sửa, xóa
 
-- AI service đọc lại workbook và gọi feed nội bộ của Catalog mỗi 90 giây (cấu hình `PRODUCT_SYNC_SECONDS`). Feed yêu cầu `X-Internal-Key` và không đi qua API Gateway.
-- Với mỗi nguồn, bản ghi được upsert theo ID ổn định. Các bản ghi không còn trong snapshot hoàn chỉnh bị xóa sau khi các bản ghi mới đã index thành công. Nếu Catalog/Ollama lỗi, dữ liệu cũ được giữ và tác vụ thử lại ở vòng sau.
-- Sản phẩm Catalog đang hoạt động được ưu tiên khi có cùng slug với sản phẩm workbook. Khi admin thêm/sửa hoặc chuyển sản phẩm sang INACTIVE, feed ở vòng tiếp theo cập nhật/xóa bản ghi nguồn Catalog. Thay đổi trong XLSX cũng được đồng bộ sau khi lưu file.
+- AI service gọi feed nội bộ của Catalog mỗi 90 giây (cấu hình `PRODUCT_SYNC_SECONDS`). Feed đọc Catalog DB, yêu cầu `X-Internal-Key` và không đi qua API Gateway.
+- Bản ghi được upsert theo ID Catalog ổn định. Các bản ghi không còn trong snapshot hoàn chỉnh bị xóa sau khi các bản ghi mới đã index thành công. Nếu Catalog/Ollama lỗi, dữ liệu cũ được giữ và tác vụ thử lại ở vòng sau.
+- Khi admin thêm/sửa, đổi giá/khuyến mãi hoặc chuyển sản phẩm sang INACTIVE, Catalog yêu cầu đồng bộ lại; vòng định kỳ cũng đối chiếu toàn bộ. Chỉ mục workbook cũ được xóa bằng migration V5.
 - `GET /api/v1/admin/ai/index-status` xem số bản ghi và lỗi gần nhất; `POST /api/v1/admin/ai/reindex` yêu cầu chạy lại ngay. Hai API chỉ dành cho admin.
 
 ## Chạy tại máy phát triển

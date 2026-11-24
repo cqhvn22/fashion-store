@@ -6,8 +6,8 @@ Ngày kiểm tra: 15/11/2026. Phạm vi: mã nguồn, unit test và chạy thự
 
 ```mermaid
 flowchart LR
-  W[XLSX ATINO] --> S[Đồng bộ theo ID và hash]
-  C[Catalog API] --> S
+  C[Catalog DB] --> F[Catalog API nội bộ]
+  F --> S[Đồng bộ theo ID và hash]
   S --> E[Ollama embedding]
   E --> D[(PostgreSQL fashion_ai)]
   K[Tài liệu admin đang bật] --> D
@@ -30,7 +30,7 @@ flowchart LR
 ## Bằng chứng chạy thực tế
 
 - AI image build thành công; **12 unit test Python qua**; frontend build thành công.
-- Chỉ mục có 280 sản phẩm Catalog và 280 mục workbook; Ollama embedding hoạt động.
+- Trong lần kiểm tra cũ, chỉ mục có 280 sản phẩm Catalog và 280 mục workbook. Từ migration V5, chỉ còn sản phẩm Catalog; XLSX là file nhập ban đầu.
 - Bộ đánh giá `ai-service/eval/retrieval_cases.json` có 10 ca: 5 tên chính xác, 4 câu tự nhiên có ràng buộc, 1 câu không có kết quả. **10/10 qua**, exact recall@5 = 1,0; p50 2,48 giây, tối đa 4,17 giây trên máy kiểm tra. Bộ nhỏ chưa đại diện lưu lượng thật.
 - Câu “Áo phông nào mặc mát dưới 200k?” gọi OpenRouter thật, trả 3 nguồn và `answerOrigin=MODEL` sau khoảng 12,5 giây. Câu “Áo xanh neon dưới 1000đ size 4XL” trả `NO_RESULTS`, không bịa sản phẩm.
 
@@ -40,6 +40,6 @@ flowchart LR
 2. Bộ 10 ca mới kiểm tra retrieval; chưa đo độ đúng từng mệnh đề, p95, lỗi provider hay prompt injection trên tập lớn. Mã `[SP/TL]` cho biết nguồn đưa vào prompt, **không tự chứng minh** mọi phát biểu của model.
 3. Prompt coi tài liệu truy xuất là dữ liệu không đáng tin, nhưng prompt đơn lẻ không loại bỏ hết prompt injection.
 4. Trạng thái job đồng bộ nằm trong RAM. Provider/model của mỗi lượt chỉ có ở phản hồi trực tiếp, chưa lưu trong lịch sử DB. `/health` chưa kiểm tra toàn bộ dependency.
-5. Nếu Catalog xóa sản phẩm nhưng workbook vẫn chứa nó, bản workbook có thể xuất hiện lại. Cần xử lý cả hai nguồn hoặc có danh sách loại trừ.
+5. Chỉ mục phụ thuộc feed Catalog và embedding Ollama; cần giám sát để phát hiện chậm đồng bộ khi một trong hai dịch vụ lỗi.
 
 Tiêu chí mở rộng: [Microsoft RAG evaluators](https://learn.microsoft.com/en-us/azure/foundry/concepts/evaluation-evaluators/rag-evaluators), [OWASP LLM01](https://genai.owasp.org/llmrisk/llm01-prompt-injection/), [pgvector](https://github.com/pgvector/pgvector). Xem [hướng dẫn dựng và kiểm chứng](ai-rag-build-guide.md).

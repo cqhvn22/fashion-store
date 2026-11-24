@@ -13,5 +13,4 @@ AI_CHAT_MODEL = os.environ.get("AI_CHAT_MODEL", "nvidia/nemotron-3-ultra-550b-a5
 CATALOG_SERVICE_URL = os.environ.get("CATALOG_SERVICE_URL", "http://catalog-service:8082").rstrip("/")
 ORDER_SERVICE_URL = os.environ.get("ORDER_SERVICE_URL", "http://order-service:8083").rstrip("/")
 INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "")
-WORKBOOK_PATH = os.environ.get("WORKBOOK_PATH", "/app/atino_products.xlsx")
 PRODUCT_SYNC_SECONDS = int(os.environ.get("PRODUCT_SYNC_SECONDS", "90"))

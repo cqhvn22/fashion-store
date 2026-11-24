@@ -36,11 +36,11 @@ describe('chuyển tri thức cũ từ trình duyệt vào AI service', () => {
     const { knowledgeService } = await import('../services/chat');
     const { httpClient } = await import('../services/httpClient');
     const get = vi.spyOn(httpClient, 'get').mockResolvedValue({
-      data: { data: { documents: { catalog: 13, workbook: 280 } } },
+      data: { data: { catalog: { total: 13, indexed: 0, deleted: 0 }, documents: { catalog: 13 } } },
     });
     const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { data: { queued: true } } });
 
-    expect((await knowledgeService.productStatus()).documents).toEqual({ catalog: 13, workbook: 280 });
+    expect((await knowledgeService.productStatus()).documents).toEqual({ catalog: 13 });
     await knowledgeService.refreshProducts();
     expect(get).toHaveBeenCalledWith('/admin/ai/index-status');
     expect(post).toHaveBeenCalledWith('/admin/ai/reindex');

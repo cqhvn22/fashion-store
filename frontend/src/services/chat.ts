@@ -7,7 +7,6 @@ const key = 'fashionhub_knowledge';
 const conversationKey = 'fashionhub_conversations';
 
 interface ProductKnowledgeStatus {
-  workbook?: { total: number; indexed: number; deleted: number } | null;
   catalog?: { total: number; indexed: number; deleted: number } | null;
   documents?: Record<string, number>;
   last_sync?: string | null;

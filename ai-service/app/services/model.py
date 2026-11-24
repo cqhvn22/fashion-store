@@ -326,8 +326,6 @@ def generate_ai_chat(
         )
         if openrouter_reply:
             return openrouter_reply
-        if fallback_text:
-            return fallback_text
         raise HTTPException(
             status_code=503,
             detail="Trợ lý AI đang bận, chưa thể trả lời lúc này. Vui lòng thử lại sau.",
