@@ -31,7 +31,7 @@ import { AdminHomeCategories } from '../features/admin/AdminHomeCategories';
 import { ChatPage } from '../features/chat/ChatWidget';
 import { ContentPage, StatusPage } from '../features/content/ContentPages';
 import { useAuthStore } from '../stores/authStore';
-import { useDbAuth } from '../services/httpClient';
+import { hasAccessToken, useDbAuth } from '../services/httpClient';
 import { httpClient } from '../services/httpClient';
 import { useQuery } from '@tanstack/react-query';
 import type { User } from '../types/models';
@@ -52,7 +52,7 @@ function ProtectedRoute({
     staleTime: 0,
     refetchOnMount: 'always',
   });
-  if (!user || (useDbAuth && !sessionStorage.getItem('fashionhub_access_token')))
+  if (!user || (useDbAuth && !hasAccessToken()))
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   if (admin && user.role !== 'ADMIN') return <Navigate to="/403" replace />;
   if (admin && useDbAuth) {
@@ -66,13 +66,13 @@ export function App() {
   const location = useLocation();
   useLayoutEffect(() => { window.scrollTo(0, 0); }, [location.pathname, location.search]);
   const ready = useAuthStore((state) => state.ready);
-  const restoreSession = useAuthStore((state) => state.restoreSession);
+  const restoreAuth = useAuthStore((state) => state.restoreAuth);
   useEffect(() => {
-    void restoreSession();
+    void restoreAuth();
     const ended = () => useAuthStore.setState({ user: null, ready: true });
-    window.addEventListener('fashionhub-session-ended', ended);
-    return () => window.removeEventListener('fashionhub-session-ended', ended);
-  }, [restoreSession]);
+    window.addEventListener('fashionhub-auth-expired', ended);
+    return () => window.removeEventListener('fashionhub-auth-expired', ended);
+  }, [restoreAuth]);
   if (!ready) return <div className="min-h-screen grid place-items-center text-slate-600">Đang mở cửa hàng...</div>;
   return (
     <Routes>

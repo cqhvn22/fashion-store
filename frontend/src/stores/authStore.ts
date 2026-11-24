@@ -3,12 +3,12 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { demoUsers } from '../mocks/catalog';
 import type { User } from '../types/models';
 import { endpoints } from '../services/endpoints';
-import { clearTokens, httpClient, refreshAccessToken, savedRefreshToken, saveTokens, useDbAuth } from '../services/httpClient';
+import { clearTokens, currentAccessToken, hasAccessToken, httpClient, refreshAccessToken, savedRefreshToken, saveTokens, useDbAuth } from '../services/httpClient';
 import { readLocal, writeLocal } from '../services/storage';
 interface AuthState {
   user: User | null;
   ready: boolean;
-  restoreSession: () => Promise<void>;
+  restoreAuth: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   register: (input: {
     fullName: string;
@@ -35,10 +35,10 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       user: null,
       ready: false,
-      restoreSession: async () => {
+      restoreAuth: async () => {
         if (get().ready) return;
         if (!useDbAuth) { set({ ready: true }); return; }
-        if (!savedRefreshToken() && !sessionStorage.getItem('fashionhub_access_token')) {
+        if (!savedRefreshToken() && !hasAccessToken()) {
           set({ user: null, ready: true }); return;
         }
         try {
@@ -135,7 +135,7 @@ export const useAuthStore = create<AuthState>()(
         await httpClient.put(`${endpoints.auth.me}/password`, { currentPassword, newPassword });
       },
       logout: () => {
-        const token = sessionStorage.getItem('fashionhub_access_token');
+        const token = currentAccessToken();
         const refreshToken = savedRefreshToken();
         if (useDbAuth && token)
           void httpClient.post(endpoints.auth.logout, { refreshToken }, {

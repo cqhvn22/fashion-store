@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { useAuthStore } from '../../stores/authStore';
-import { useDbAuth } from '../../services/httpClient';
+import { hasAccessToken, useDbAuth } from '../../services/httpClient';
 import { PageHeading } from '../../components/common';
 
 const loginSchema = z.object({
@@ -47,7 +47,7 @@ export function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<z.infer<typeof loginSchema>>({ resolver: zodResolver(loginSchema) });
 
-  if (user && (!useDbAuth || sessionStorage.getItem('fashionhub_access_token')))
+  if (user && (!useDbAuth || hasAccessToken()))
     return <Navigate to="/account/profile" replace />;
 
   return (
