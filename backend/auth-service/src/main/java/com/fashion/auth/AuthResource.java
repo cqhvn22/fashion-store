@@ -32,12 +32,12 @@ public class AuthResource {
     @ConfigProperty(name = "auth.jwt.ttl-seconds") long ttlSeconds;
     private final SecureRandom random = new SecureRandom();
 
-    public record Register(String fullName, String email, String phone, String password) {}
+    public record Register(String fullName, String email, String phone, String password, Boolean newsletter) {}
     public record Login(String email, String password) {}
     public record Refresh(String refreshToken) {}
 
     @POST @Path("/register")
-    public Map<String, Object> register(Register request) {
+    public Map<String, Object> register(Register request) throws java.sql.SQLException {
         Api.require(request != null && InputRules.email(request.email())
                 && InputRules.text(request.fullName(), 150) && request.phone() != null
                 && request.phone().matches("0[0-9]{9}"),
@@ -47,8 +47,18 @@ public class AuthResource {
         Api.require(Sql.one(database, "SELECT id FROM users WHERE lower(email)=?", email) == null,
                 409, "EMAIL_EXISTS", "Email đã được sử dụng");
         UUID id = UUID.randomUUID();
-        Sql.update(database, "INSERT INTO users(id,email,password_hash,full_name,phone) VALUES (?,?,?,?,?)",
-                id, email, BcryptUtil.bcryptHash(request.password()), request.fullName().trim(), request.phone());
+        String hashedPassword = BcryptUtil.bcryptHash(request.password());
+        try (Connection connection = database.getConnection()) {
+            connection.setAutoCommit(false);
+            int created = Sql.update(connection, "INSERT INTO users(id,email,password_hash,full_name,phone) "
+                    + "VALUES (?,?,?,?,?) ON CONFLICT (lower(email)) DO NOTHING",
+                    id, email, hashedPassword, request.fullName().trim(), request.phone());
+            Api.require(created == 1, 409, "EMAIL_EXISTS", "Email đã được sử dụng");
+            if (Boolean.TRUE.equals(request.newsletter())) {
+                Sql.update(connection, NewsletterResource.SUBSCRIBE, email, UUID.randomUUID());
+            }
+            connection.commit();
+        }
         return Api.ok(user(id));
     }
 

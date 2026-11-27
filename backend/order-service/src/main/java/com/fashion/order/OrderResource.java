@@ -20,17 +20,20 @@ import java.util.Map;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.eclipse.microprofile.jwt.JsonWebToken;
+import org.jboss.logging.Logger;
 
 @Path("/api/v1")
 @Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
 public class OrderResource {
+    private static final Logger LOG = Logger.getLogger(OrderResource.class);
     @Inject DataSource database;
     @Inject JsonWebToken jwt;
     @Inject ObjectMapper json;
     @Inject CatalogClient catalog;
     @Inject PayosClient payos;
     @Inject LoyaltyResource loyalty;
+    @Inject PaymentSettlement settlement;
 
     public record Item(UUID variantId, int quantity, Long expectedUnitPrice) {}
     public record Address(String recipientName, String phone, String province,
@@ -111,7 +114,7 @@ public class OrderResource {
             subtotal = Math.addExact(subtotal,
                     Math.multiplyExact(item.getPrice(), item.getQuantity()));
         }
-        long fee = subtotal >= 500_000 ? 0 : 30_000;
+        long fee = subtotal >= 499_000 ? 0 : 30_000;
         LoyaltyResource.Discount tierDiscount;
         try {
             tierDiscount = loyalty.bestDiscount(userId, subtotal);
@@ -161,7 +164,8 @@ public class OrderResource {
             }
             event(connection, orderId, "fashion.order.created.v1", Map.of(
                     "orderId", orderId.toString(), "userId", userId.toString(),
-                    "orderCode", code, "totalAmount", total, "createdAt", Instant.now().toString()));
+                    "orderCode", code, "totalAmount", total, "paymentMethod", method,
+                    "paymentExpiresAt", expiresAt.toString(), "createdAt", Instant.now().toString()));
             connection.commit();
         } catch (Exception error) {
             catalog.release(checkoutId);
@@ -199,10 +203,32 @@ public class OrderResource {
     public Map<String, Object> payment(@PathParam("id") UUID id) {
         Map<String, Object> order = order(id, false);
         Map<String, Object> attempt = Sql.one(database,
-                "SELECT status,checkout_url,expires_at,paid_at FROM payment_attempts WHERE order_id=? ORDER BY created_at DESC LIMIT 1",
+                "SELECT status,checkout_url,qr_code,account_number,account_name,transfer_description,amount,expires_at,paid_at,provider_order_code,payment_link_id FROM payment_attempts WHERE order_id=? ORDER BY created_at DESC LIMIT 1",
                 id);
+        boolean statusCheckUnavailable = false;
+        if ("PAYOS".equals(order.get("paymentMethod"))
+                && "PENDING".equals(order.get("paymentStatus"))
+                && attempt != null && "PENDING".equals(attempt.get("status"))
+                && attempt.get("paymentLinkId") != null) {
+            long code = ((Number) attempt.get("providerOrderCode")).longValue();
+            long amount = ((Number) attempt.get("amount")).longValue();
+            try {
+                JsonNode provider = payos.get(code);
+                if (settlement.confirmProviderState(provider, code, amount, "PAYOS_STATUS_CHECK")) {
+                    order = order(id, false);
+                    attempt = Sql.one(database,
+                            "SELECT status,checkout_url,qr_code,account_number,account_name,transfer_description,amount,expires_at,paid_at,provider_order_code,payment_link_id FROM payment_attempts WHERE order_id=? ORDER BY created_at DESC LIMIT 1",
+                            id);
+                }
+            } catch (jakarta.ws.rs.WebApplicationException providerError) {
+                statusCheckUnavailable = true;
+                LOG.warnf("PayOS status check unavailable for order %s: HTTP %d",
+                        id, providerError.getResponse().getStatus());
+            }
+        }
         return Api.ok(Map.of("orderId", id, "paymentMethod", order.get("paymentMethod"),
                 "paymentStatus", order.get("paymentStatus"),
+                "statusCheckUnavailable", statusCheckUnavailable,
                 "attempt", attempt == null ? Map.of() : attempt));
     }
 
@@ -296,6 +322,9 @@ public class OrderResource {
                 case "SHIPPING" -> "DELIVERED".equals(next);
                 default -> false;
             };
+            Api.require(!"PAYOS".equals(current.get("paymentMethod")) || "CANCELLED".equals(next)
+                    || "PAID".equals(current.get("paymentStatus")), 409, "PAYMENT_PENDING",
+                    "Chỉ xử lý đơn chuyển khoản khi đã nhận đủ tiền");
             Api.require(valid, 409, "INVALID_TRANSITION", "Chuyển trạng thái không hợp lệ");
             Api.require(!"CANCELLED".equals(next) || !"PAID".equals(current.get("paymentStatus")),
                     409, "REFUND_REQUIRED", "Đơn đã thanh toán cần quy trình hoàn tiền");
@@ -375,18 +404,27 @@ public class OrderResource {
     private void createPayosLink(UUID orderId, long providerCode, long total, Instant expiresAt) {
         JsonNode link;
         try {
-            link = payos.create(providerCode, total, expiresAt);
+            link = payos.create(providerCode, total, expiresAt, orderId);
         } catch (jakarta.ws.rs.WebApplicationException providerError) {
-            // A timed-out create request may still have created the link at PayOS.
-            link = payos.get(providerCode);
+            // Only an uncertain transport/server failure may have created a link.
+            Object entity = providerError.getResponse().getEntity();
+            if (!(entity instanceof Map<?, ?> details)
+                    || !"PAYOS_UNAVAILABLE".equals(details.get("code"))) throw providerError;
+            try {
+                link = payos.get(providerCode);
+            } catch (jakarta.ws.rs.WebApplicationException lookupError) {
+                throw providerError;
+            }
         }
         Api.require(link.path("orderCode").asLong() == providerCode
                 && link.path("amount").asLong() == total
                 && link.hasNonNull("paymentLinkId") && link.hasNonNull("checkoutUrl"),
                 502, "PAYOS_INVALID_RESPONSE", "PayOS trả thông tin link không hợp lệ");
         Sql.update(database,
-                "UPDATE payment_attempts SET payment_link_id=?,checkout_url=?,updated_at=now() WHERE order_id=? AND provider_order_code=?",
+                "UPDATE payment_attempts SET payment_link_id=?,checkout_url=?,qr_code=?,account_number=?,account_name=?,transfer_description=?,updated_at=now() WHERE order_id=? AND provider_order_code=?",
                 link.path("paymentLinkId").asText(), link.path("checkoutUrl").asText(),
+                link.path("qrCode").asText(null), link.path("accountNumber").asText(null),
+                link.path("accountName").asText(null), link.path("description").asText(null),
                 orderId, providerCode);
     }
 

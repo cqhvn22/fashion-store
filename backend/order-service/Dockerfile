@@ -9,7 +9,7 @@ COPY order-service/pom.xml order-service/pom.xml
 COPY notification-service/pom.xml notification-service/pom.xml
 COPY common/src common/src
 COPY order-service/src order-service/src
-RUN --mount=type=cache,target=/root/.m2 mvn -B -pl order-service -am -DskipTests package
+RUN --mount=type=cache,target=/root/.m2 mvn -B -pl order-service -am package
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /workspace/order-service/target/quarkus-app/ /app/

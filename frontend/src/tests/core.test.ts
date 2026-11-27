@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { seedProducts } from '../mocks/catalog';
 import { categoryService, getMockCategories, productService } from '../services/catalog';
-import { orderService } from '../services/orders';
+import { orderService, shippingFeeFor } from '../services/orders';
 import { consolidateCartItems, useCartStore } from '../stores/cartStore';
 import { readCheckoutDraft, saveCheckoutDraft } from '../services/checkoutDraft';
 import { cartSubtotal, formatCurrency } from '../utils/format';
@@ -11,6 +11,9 @@ beforeEach(() => {
   useCartStore.setState({ items: [] });
 });
 describe('catalog and cart', () => {
+  it('miễn phí vận chuyển từ đúng 499.000đ', () => {
+    expect([498999, 499000, 499001].map(shippingFeeFor)).toEqual([30000, 0, 0]);
+  });
   it('formats whole VND amounts', () => {
     expect(formatCurrency(199000)).toContain('199.000');
   });

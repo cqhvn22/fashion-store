@@ -35,6 +35,7 @@ export interface HomeCategoryShowcase {
   updatedAt?: string;
 }
 export interface InAppNotification {
+  paymentReminderUntil?: string | null;
   id: string;
   orderId: string | null;
   subject: string | null;
@@ -165,7 +166,9 @@ export interface Order {
   shippingFee: number;
   discountAmount: number;
   totalAmount: number;
-  paymentMethod: 'COD' | 'MOCK_PAYMENT';
+  paymentMethod: 'COD' | 'PAYOS' | 'MOCK_PAYMENT';
+  paymentStatus?: 'UNPAID' | 'PENDING' | 'PAID' | 'EXPIRED' | 'CANCELLED';
+  checkoutUrl?: string | null;
   status: OrderStatus;
   note?: string;
   createdAt: string;

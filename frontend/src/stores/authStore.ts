@@ -15,6 +15,7 @@ interface AuthState {
     email: string;
     phone: string;
     password: string;
+    newsletter?: boolean;
   }) => Promise<void>;
   update: (input: Partial<User>) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;

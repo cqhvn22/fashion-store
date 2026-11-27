@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { useAuthStore } from '../../stores/authStore';
-import { hasAccessToken, useDbAuth } from '../../services/httpClient';
+import { httpClient, hasAccessToken, useDbAuth } from '../../services/httpClient';
 import { PageHeading } from '../../components/common';
 
 const loginSchema = z.object({
@@ -28,6 +28,7 @@ const registerSchema = z
       .refine((value) => new TextEncoder().encode(value).length <= 72, 'Mật khẩu tối đa 72 byte')
       .regex(/^(?=.*[A-Za-z])(?=.*[0-9]).+$/, 'Mật khẩu cần có chữ và số'),
     confirm: z.string(),
+    newsletter: z.boolean().optional(),
   })
   .refine((value) => value.password === value.confirm, {
     path: ['confirm'],
@@ -39,10 +40,12 @@ export function LoginPage() {
   const login = useAuthStore((state) => state.login);
   const navigate = useNavigate();
   const location = useLocation();
+  const loginMessage: unknown = location.state?.message;
   const [visible, setVisible] = useState(false);
   const [serverError, setServerError] = useState('');
   const {
     register,
+    getValues,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<z.infer<typeof loginSchema>>({ resolver: zodResolver(loginSchema) });
@@ -58,6 +61,9 @@ export function LoginPage() {
         description="Chào mừng bạn đến với FashionHub. Vui lòng đăng nhập để tiếp tục trải nghiệm mua sắm."
       />
 
+      {typeof loginMessage === 'string' && (
+        <p role="status" className="mb-4 rounded bg-emerald-50 p-3 text-sm text-emerald-800">{loginMessage}</p>
+      )}
       <div className="grid md:grid-cols-2 gap-10 lg:gap-14 pt-2">
         {/* Left Column: Login Form */}
         <div className="panel space-y-6">
@@ -122,7 +128,13 @@ export function LoginPage() {
             </label>
 
             <div className="flex justify-end text-xs">
-              <Link to="/forgot-password" className="text-[#666] hover:text-brand underline">
+              <Link to="/forgot-password" state={{ email: getValues('email') }}
+                onClick={event => {
+                  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+                  event.preventDefault();
+                  navigate('/forgot-password', { state: { email: getValues('email') } });
+                }}
+                className="text-[#666] hover:text-brand underline">
                 Quên mật khẩu?
               </Link>
             </div>
@@ -259,6 +271,10 @@ export function RegisterPage() {
 
             {serverError && <p className="field-error font-medium">{serverError}</p>}
 
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-0.5" {...register('newsletter')} />
+              Nhận bản tin sản phẩm mới và ưu đãi từ FashionHub qua email.
+            </label>
             <p className="text-[11px] text-[#767676] leading-relaxed pt-2">
               Bằng việc đăng ký, bạn đồng ý với <Link to="/policies/terms" className="underline hover:text-ink">Điều khoản sử dụng</Link> và <Link to="/policies/privacy" className="underline hover:text-ink">Chính sách bảo mật</Link> của FashionHub.
             </p>
@@ -294,36 +310,104 @@ export function RegisterPage() {
 }
 
 export function ForgotPasswordPage() {
-  const [done, setDone] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const user = useAuthStore(state => state.user);
+  const logout = useAuthStore(state => state.logout);
+  const [email, setEmail] = useState<string>(location.state?.email ?? '');
+  const [step, setStep] = useState<'email' | 'code' | 'password' | 'done'>('email');
+  const [token, setToken] = useState(new URLSearchParams(location.hash.slice(1)).get('token') ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const currentStep = step === 'email' && token ? 'password' : step;
+
+  const sendCode = async () => {
+    await httpClient.post('/auth/forgot-password', { email: email.trim() });
+    setStep('code');
+  };
+
   return (
-    <div className="container-shell py-12 md:py-16 max-w-lg">
+    <div className="container-shell py-12 max-w-lg">
       <div className="panel space-y-6">
-        <PageHeading
-          title="QUÊN MẬT KHẨU"
-          description="Nhập địa chỉ email đăng ký để nhận hướng dẫn khôi phục mật khẩu tài khoản."
-        />
-        {done ? (
-          <div className="bg-[#f8f8f8] border border-brand p-5 text-xs text-ink leading-relaxed">
-            Yêu cầu khôi phục mật khẩu đã được tiếp nhận. Vui lòng kiểm tra hộp thư đến của bạn để tiếp tục.
-          </div>
-        ) : (
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              setDone(true);
-            }}
-            className="space-y-4"
-          >
-            <label className="form-label">
-              Địa chỉ Email
-              <input required type="email" placeholder="name@example.com" className="field mt-1.5" />
-            </label>
-            <button className="btn-primary w-full py-3.5 text-xs">GỬI YÊU CẦU KHÔI PHÚC</button>
+        <PageHeading title={currentStep === 'password' ? 'Đặt mật khẩu mới' : 'Quên mật khẩu'} />
+        {step === 'done' ? <p role="status">Đã đổi mật khẩu. Bạn có thể đăng nhập lại.</p> : (
+          <form className="space-y-4" key={currentStep} onSubmit={async event => {
+            event.preventDefault();
+            const form = new FormData(event.currentTarget);
+            setBusy(true);
+            setError('');
+            try {
+              if (currentStep === 'email' || (event.nativeEvent as SubmitEvent).submitter?.getAttribute('value') === 'resend') {
+                await sendCode();
+              } else if (currentStep === 'code') {
+                const { data } = await httpClient.post<{ data: { token: string } }>('/auth/verify-reset-code', {
+                  email: email.trim(),
+                  code: form.get('code'),
+                });
+                setToken(data.data.token);
+                setStep('password');
+              } else {
+                const password = String(form.get('password'));
+                if (password !== form.get('confirm')) throw new Error('Mật khẩu xác nhận không khớp.');
+                if (new TextEncoder().encode(password).length > 72) throw new Error('Mật khẩu tối đa 72 byte.');
+                await httpClient.post('/auth/reset-password', { token, password });
+                if (user?.email.toLowerCase() === email.trim().toLowerCase()) {
+                  logout();
+                  navigate('/login', { replace: true, state: { message: 'Đã đổi mật khẩu. Vui lòng đăng nhập lại.' } });
+                  return;
+                }
+                setToken('');
+                setStep('done');
+              }
+            } catch (cause) {
+              setError(cause instanceof Error ? cause.message : 'Chưa xử lý được yêu cầu.');
+            } finally {
+              setBusy(false);
+            }
+          }}>
+            {currentStep === 'email' && (
+              <label className="form-label">Email đăng ký
+                <input className="field mt-1" type="email" autoComplete="email" required maxLength={255}
+                  value={email} onChange={event => setEmail(event.target.value)} />
+              </label>
+            )}
+            {currentStep === 'code' && (
+              <>
+                <p className="text-sm text-slate-600">Nếu <strong>{email}</strong> đã đăng ký, bạn sẽ nhận được mã gồm 6 chữ số. Mã có hiệu lực trong 10 phút.</p>
+                <label className="form-label">Mã xác thực
+                  <input className="field mt-1 tracking-widest" name="code" inputMode="numeric"
+                    autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6} />
+                </label>
+              </>
+            )}
+            {currentStep === 'password' && (
+              <>
+                <label className="form-label">Mật khẩu mới (ít nhất 8 ký tự, có chữ và số)
+                  <input className="field mt-1" type="password" name="password" autoComplete="new-password"
+                    required minLength={8} pattern="(?=.*[A-Za-z])(?=.*[0-9]).+" />
+                </label>
+                <label className="form-label">Nhập lại mật khẩu
+                  <input className="field mt-1" type="password" autoComplete="new-password" name="confirm" required />
+                </label>
+              </>
+            )}
+            {error && <p role="alert" className="field-error">{error}</p>}
+            <button disabled={busy} className="btn-primary w-full">
+              {busy ? 'Đang xử lý…' : currentStep === 'email' ? 'Gửi mã xác thực' :
+                currentStep === 'code' ? 'Xác nhận mã' : 'Lưu mật khẩu mới'}
+            </button>
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+              {currentStep !== 'email' && (
+                <button type="button" disabled={busy} className="underline" onClick={() => {
+                  setError(''); setToken(''); setStep('email');
+                }}>{currentStep === 'code' ? 'Đổi địa chỉ email' : 'Yêu cầu mã mới'}</button>
+              )}
+              {currentStep === 'code' && <button className="text-brand underline" type="submit" value="resend"
+                formNoValidate disabled={busy}>Gửi lại mã</button>}
+            </div>
           </form>
         )}
-        <Link to="/login" className="block text-xs font-bold uppercase tracking-wider text-brand hover:underline mt-4">
-          ← Quay lại trang đăng nhập
-        </Link>
+        <Link to="/login" className="text-brand">Quay lại đăng nhập</Link>
       </div>
     </div>
   );

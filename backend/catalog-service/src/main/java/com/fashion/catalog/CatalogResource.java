@@ -21,6 +21,9 @@ import org.eclipse.microprofile.jwt.JsonWebToken;
 @Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
 public class CatalogResource {
+    private static final String SOLD_QUANTITY = "(SELECT COALESCE(sum(r.quantity),0) "
+            + "FROM inventory_reservations r JOIN product_variants v ON v.id=r.variant_id "
+            + "WHERE v.product_id=p.id AND r.status='COMMITTED')";
     private static final String VISIBLE_CATEGORY_IDS = "WITH RECURSIVE visible AS ("
             + "SELECT id FROM categories WHERE parent_id IS NULL AND is_active=true "
             + "UNION ALL SELECT child.id FROM categories child JOIN visible v ON child.parent_id=v.id "
@@ -108,6 +111,49 @@ public class CatalogResource {
             @DefaultValue("1") @QueryParam("page") int page,
             @DefaultValue("12") @QueryParam("limit") int limit) {
         return search(false, category, query, minPrice, maxPrice, size, color, sort, page, limit);
+    }
+
+    @GET @Path("/products/home-selection")
+    public Map<String, Object> homeSelection(@QueryParam("section") String section,
+            @QueryParam("seed") long seed, @QueryParam("showcaseId") UUID showcaseId) {
+        int limit = 8;
+        String scope = "";
+        String poolOrder = "";
+        List<Object> args = new ArrayList<>();
+        args.add(seed);
+        switch (section == null ? "" : section) {
+            case "new" -> poolOrder = " ORDER BY p.created_at DESC, shuffle LIMIT 32";
+            case "popular" -> poolOrder = " ORDER BY sold DESC, shuffle LIMIT 32";
+            case "sale" -> scope = " AND EXISTS (SELECT 1 FROM product_variants v "
+                    + "JOIN current_variant_prices cp ON cp.variant_id=v.id WHERE v.product_id=p.id "
+                    + "AND v.is_active AND cp.effective_price<v.price)";
+            case "category" -> {
+                Map<String, Object> config = Sql.one(database, "SELECT hc.* FROM home_categories hc "
+                        + "WHERE hc.id=? AND hc.is_active AND hc.category_id IN (" + VISIBLE_CATEGORY_IDS + ")", showcaseId);
+                if (config == null) return Api.ok(List.of());
+                limit = ((Number) config.get("displayLimit")).intValue();
+                if ("CUSTOM".equals(config.get("selectionMode"))) {
+                    scope = " AND p.id::text IN (SELECT jsonb_array_elements_text(CAST(? AS jsonb)))";
+                    args.add(config.get("productIds"));
+                } else {
+                    scope = " AND p.category_id IN (WITH RECURSIVE descendants(id) AS (SELECT CAST(? AS uuid) "
+                            + "UNION SELECT c.id FROM categories c JOIN descendants d ON c.parent_id=d.id) SELECT id FROM descendants)";
+                    args.add(config.get("categoryId"));
+                }
+            }
+            default -> throw new BadRequestException("Unknown home section");
+        }
+        // Reserve a quarter of the shelf for its strongest sellers; rotate the other slots.
+        args.add(Math.max(1, limit / 4));
+        args.add(limit);
+        String sql = "WITH pool AS (SELECT p.id," + SOLD_QUANTITY + " AS sold,"
+                + "md5(p.id::text || CAST(? AS text)) AS shuffle FROM products p WHERE p.status='ACTIVE' "
+                + "AND p.category_id IN (" + VISIBLE_CATEGORY_IDS + ")" + scope + poolOrder + "), "
+                + "ranked AS (SELECT *, row_number() OVER (ORDER BY sold DESC, shuffle) AS pos FROM pool), "
+                + "picked AS (SELECT * FROM ranked ORDER BY (sold>0 AND pos<=?) DESC, shuffle LIMIT ?) "
+                + "SELECT id FROM picked ORDER BY sold DESC, shuffle";
+        return Api.ok(Sql.list(database, sql, args.toArray()).stream()
+                .map(row -> product((UUID) row.get("id"), false)).toList());
     }
 
     @GET @Path("/admin/products")
@@ -275,7 +321,7 @@ public class CatalogResource {
         String order = switch (sort == null ? "" : sort) {
             case "name_asc" -> "p.name ASC";
             case "newest" -> "p.created_at DESC";
-            case "bestselling" -> "p.sold_count DESC,p.created_at DESC";
+            case "bestselling" -> SOLD_QUANTITY + " DESC,p.created_at DESC,p.id";
             case "price_asc" -> "(SELECT min(cp.effective_price) FROM product_variants v JOIN current_variant_prices cp ON cp.variant_id=v.id WHERE v.product_id=p.id AND v.is_active) ASC NULLS LAST";
             case "price_desc" -> "(SELECT min(cp.effective_price) FROM product_variants v JOIN current_variant_prices cp ON cp.variant_id=v.id WHERE v.product_id=p.id AND v.is_active) DESC NULLS LAST";
             default -> "p.created_at DESC";
@@ -290,7 +336,8 @@ public class CatalogResource {
 
     private Map<String, Object> product(UUID id, boolean admin) {
         Map<String, Object> row = Sql.one(database,
-                "SELECT p.id,p.slug,p.name,p.description,p.category_id,p.brand,p.status,p.rating_average,p.review_count,p.sold_count,p.created_at,p.updated_at FROM products p WHERE p.id=?"
+                "SELECT p.id,p.slug,p.name,p.description,p.category_id,p.brand,p.status,p.rating_average,p.review_count,"
+                        + SOLD_QUANTITY + " AS sold_count,p.created_at,p.updated_at FROM products p WHERE p.id=?"
                         + (admin ? "" : " AND p.status='ACTIVE' AND p.category_id IN (" + VISIBLE_CATEGORY_IDS + ")"), id);
         Api.require(row != null, 404, "NOT_FOUND", "Không tìm thấy sản phẩm");
         List<Map<String, Object>> images = Sql.list(database,

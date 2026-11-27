@@ -229,7 +229,7 @@ export function OrderInvoiceContent({ order }: { order: Order }) {
               Dịch vụ giao vận & thu hộ
             </span>
             <span className="font-bold text-sm text-slate-900">
-              Giao Hàng Nhanh Tiêu Chuẩn (COD)
+              Giao Hàng Nhanh Tiêu Chuẩn{order.paymentMethod === 'COD' ? ' (COD)' : ''}
             </span>
           </div>
         </div>
@@ -358,7 +358,7 @@ export function OrderInvoiceContent({ order }: { order: Order }) {
           <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-slate-700">
             <span>Phương thức thanh toán:</span>
             <strong className="text-slate-900">
-              {order.paymentMethod === 'COD' ? 'Thanh toán khi nhận hàng (COD)' : order.paymentMethod}
+              {order.paymentMethod === 'PAYOS' ? 'Chuyển khoản qua PayOS' : 'Thanh toán khi nhận hàng (COD)'}
             </strong>
           </div>
         </div>
@@ -384,7 +384,7 @@ export function OrderInvoiceContent({ order }: { order: Order }) {
           <div className="pt-2.5 border-t-2 border-slate-900 flex justify-between items-center bg-slate-50 -mx-4 -mb-4 p-4 rounded-b">
             <div>
               <span className="block font-bold text-slate-900 uppercase text-xs tracking-wider">
-                TỔNG TIỀN PHẢI THU (COD):
+                {order.paymentMethod === 'COD' ? 'TỔNG TIỀN PHẢI THU (COD):' : 'TỔNG TIỀN ĐƠN HÀNG:'}
               </span>
               <span className="text-[11px] text-slate-500 font-normal">
                 (Đã bao gồm VAT và cước vận chuyển)

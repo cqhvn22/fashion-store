@@ -7,11 +7,13 @@ import { ProvinceWardFields, isValidDivision } from '../../components/ProvinceWa
 import { ProductGrid } from '../../components/ProductCard';
 import { OrderTimeline } from '../../components/OrderTimeline';
 import { OrderInvoiceModal } from '../../components/OrderInvoice';
+import { PayosPaymentModal } from '../../components/PayosPaymentModal';
 import { ReviewEditor } from '../../components/ReviewEditor';
 import { reviewService } from '../../services/reviews';
 import { getMockProducts, productService } from '../../services/catalog';
 import { useDbAuth, useDbCatalog } from '../../services/httpClient';
 import { orderService } from '../../services/orders';
+import { PaymentStatusBadge } from '../../components/PaymentStatusBadge';
 import { loyaltyService, tierNames } from '../../services/loyalty';
 import { addressService } from '../../services/addresses';
 import { useAuthStore } from '../../stores/authStore';
@@ -146,11 +148,20 @@ export function ProfilePage() {
               setPasswordError(error instanceof Error ? error.message : 'Không thể đổi mật khẩu.');
             } finally { setChangingPassword(false); }
           }}>
-            <label className="form-label">Mật khẩu hiện tại<input className="field" type="password" autoComplete="current-password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
+            <label className="form-label" htmlFor="current-password">
+              Mật khẩu hiện tại
+              <input id="current-password" className="field" type="password" autoComplete="current-password"
+                required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
+            </label>
             <label className="form-label">Mật khẩu mới<input className="field" type="password" autoComplete="new-password" required minLength={8} maxLength={72} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label>
             <label className="form-label">Xác nhận mật khẩu mới<input className="field" type="password" autoComplete="new-password" required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
             {passwordError && <p className="field-error" role="alert">{passwordError}</p>}
-            <button className="btn-primary" disabled={changingPassword}>{changingPassword ? 'Đang lưu...' : 'Đổi mật khẩu'}</button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button className="btn-primary" disabled={changingPassword}>{changingPassword ? 'Đang lưu...' : 'Đổi mật khẩu'}</button>
+              <Link to="/forgot-password" state={{ email: user.email }} className="btn-outline">
+                Quên mật khẩu?
+              </Link>
+            </div>
           </form>
         </div>
       </div>
@@ -424,6 +435,11 @@ export function OrdersPage() {
                     </Link>
                     <span className="text-brand font-semibold">{formatOrderStatus(order.status)}</span>
                   </div>
+                  {(order.paymentMethod === 'PAYOS' || order.paymentStatus === 'PAID') &&
+                    <div className="mb-3 flex items-center gap-2">
+                      <PaymentStatusBadge order={order} />
+                      {order.paymentStatus === 'PENDING' && <Link className="text-sm font-semibold text-brand underline" to={`/account/orders/${order.id}`}>Xem mã QR</Link>}
+                    </div>}
                   <div className="flex items-center gap-3">
                     <Link
                       to={productUrl}
@@ -482,6 +498,8 @@ export function OrdersPage() {
 }
 export function OrderDetailPage() {
   const { orderId } = useParams();
+  const [params, setParams] = useSearchParams();
+  const [paymentOpen, setPaymentOpen] = useState(false);
   const [showInvoice, setShowInvoice] = useState(false);
   const [reviewItem, setReviewItem] = useState<OrderItem | null>(null);
   const client = useQueryClient();
@@ -498,7 +516,7 @@ export function OrderDetailPage() {
     refetchOnWindowFocus: 'always',
   });
   const mutation = useMutation({
-    mutationFn: () => orderService.updateStatus(orderId!, 'CANCELLED'),
+    mutationFn: () => orderService.cancel(orderId!),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ['order', orderId] });
       void client.invalidateQueries({ queryKey: ['orders'] });
@@ -509,6 +527,13 @@ export function OrderDetailPage() {
     queryFn: () => reviewService.mine(orderId!),
     enabled: !!orderId && order?.status === 'DELIVERED',
   });
+  useEffect(() => {
+    if (params.get('payment') !== 'qr' || !order || order.id !== orderId) return;
+    if (order.paymentMethod === 'PAYOS' && order.paymentStatus === 'PENDING') setPaymentOpen(true);
+    const next = new URLSearchParams(params);
+    next.delete('payment');
+    setParams(next, { replace: true });
+  }, [params, setParams, order, orderId]);
   return (
     <AccountShell>
       {error ? (
@@ -545,6 +570,7 @@ export function OrderDetailPage() {
                 <span>In hóa đơn</span>
               </button>
               <span className="text-brand font-semibold">{formatOrderStatus(order.status)}</span>
+              <PaymentStatusBadge order={order} />
             </div>
           </div>
           <p className="text-sm text-slate-500 mb-6">Đặt ngày {formatDate(order.createdAt)}</p>
@@ -608,7 +634,10 @@ export function OrderDetailPage() {
                 {order.shippingAddress.detail}, {order.shippingAddress.ward},{' '}
                 {order.shippingAddress.district ? `${order.shippingAddress.district}, ` : ''}{order.shippingAddress.province}
               </p>
-              <p className="mt-2">Thanh toán: COD</p>
+              <p className="mt-2">Thanh toán: {order.paymentMethod === 'PAYOS' ? 'Chuyển khoản qua PayOS' : 'Thanh toán khi nhận hàng (COD)'}</p>
+              {order.paymentMethod === 'PAYOS' && <div className="mt-3 flex items-center gap-2">
+                <span>Trạng thái thanh toán:</span><PaymentStatusBadge order={order} />
+              </div>}
             </div>
             <div>
               <div className="flex justify-between mb-2">
@@ -625,6 +654,11 @@ export function OrderDetailPage() {
               </div>
             </div>
           </div>
+          {order.paymentMethod === 'PAYOS' && order.paymentStatus === 'PENDING' && (
+            <button type="button" className="btn-primary mt-5" onClick={() => setPaymentOpen(true)}>Thanh toán đơn hàng</button>
+          )}
+          {order.paymentMethod === 'PAYOS' && order.paymentStatus === 'PENDING' &&
+            <p role="status" className="mt-3 rounded bg-amber-50 p-3 text-sm text-amber-900">Đơn này chưa được thanh toán. Quét mã QR để hoàn tất hoặc hủy đơn nếu bạn không muốn tiếp tục.</p>}
           <div className="flex items-center justify-between mt-7 mb-3">
             <div className="flex items-center gap-2.5">
               <h3 className="font-bold text-ink text-base">Lịch sử xử lý</h3>
@@ -657,6 +691,7 @@ export function OrderDetailPage() {
               onClose={() => setShowInvoice(false)}
             />
           )}
+          {paymentOpen && orderId && <PayosPaymentModal orderId={orderId} onClose={() => { setPaymentOpen(false); void refetch(); }} />}
           {reviewItem && <ReviewEditor key={reviewItem.id} item={reviewItem} existing={myReviews.find((review) => review.orderItemId === reviewItem.id)} onClose={() => setReviewItem(null)} />}
         </div>
       )}

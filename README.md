@@ -27,7 +27,7 @@ Frontend tại `localhost:5173` lấy danh mục, sản phẩm và banner từ P
 
 Các service Quarkus có health check tại `/q/health`; Gateway chuyển tiếp `/api/v1`. PostgreSQL tự tạo database ở lần khởi tạo volume đầu tiên; Flyway chạy migration của từng service, AI service chạy migration riêng. Auth phát JWT ký HS256, các API có quyền kiểm tra token tại service. Order gọi Catalog qua gRPC trên cổng nội bộ 9000 để giữ, xác nhận hoặc hoàn tồn kho; hợp đồng protobuf nằm tại `backend/common/src/main/resources/inventory.proto`. Order hỗ trợ COD và tạo link PayOS khi có cấu hình. Webhook PayOS được kiểm tra chữ ký và chống xử lý lặp; sự kiện Order được đưa lên Kafka qua outbox, Notification ghi thông báo trong ứng dụng.
 
-`POST /api/v1/orders` yêu cầu header `Idempotency-Key` và `paymentMethod` là `COD` hoặc `PAYOS`; frontend Docker hiện dùng COD. Thanh toán PayOS thật cần đăng ký webhook URL công khai ở PayOS và cấu hình `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`, `PAYOS_RETURN_URL`, `PAYOS_CANCEL_URL`. AI RAG dùng Qwen3 Embedding 0.6B qua Ollama; model trả lời phụ thuộc `AI_PROVIDER`/`AI_CHAT_MODEL` trong `.env` (hiện là OpenRouter/Nemotron). Xem [các bước xây dựng RAG](docs/architecture/ai-rag-build-guide.md) và [bản đánh giá](docs/architecture/ai-rag-audit.md).
+`POST /api/v1/orders` yêu cầu header `Idempotency-Key` và `paymentMethod` là `COD` hoặc `PAYOS`. Checkout cho khách chọn COD hoặc chuyển khoản qua PayOS; đơn PayOS hiển thị QR trong popup, tự kiểm tra trạng thái mỗi 5 giây khi popup mở và chỉ được xác nhận qua webhook đã kiểm tra chữ ký. Điền `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY` trong `.env` và đăng ký webhook HTTPS công khai ở PayOS; xem [hướng dẫn PayOS](docs/deployment/payos.md). AI RAG dùng Qwen3 Embedding 0.6B qua Ollama; model trả lời phụ thuộc `AI_PROVIDER`/`AI_CHAT_MODEL` trong `.env` (hiện là OpenRouter/Nemotron). Xem [các bước xây dựng RAG](docs/architecture/ai-rag-build-guide.md) và [bản đánh giá](docs/architecture/ai-rag-audit.md).
 
 Notification ghi thông báo `IN_APP` cho khách khi trạng thái đơn thay đổi và cho admin khi có đơn mới. Chuông thông báo trên frontend kiểm tra cập nhật định kỳ 10 giây; mỗi người chỉ đọc và đánh dấu thông báo của mình. Email/SMS và quy trình hoàn tiền PayOS chưa triển khai. Không dùng file `.env` thật trong Git.
 
@@ -44,3 +44,13 @@ Bản mô tả chức năng, kiến trúc và SQL CSDL theo service: [docs/archi
 | Notification | 8084 |
 | AI | 8000 |
 | Frontend Docker | 3000 |
+
+### Gửi email qua Resend
+
+Đặt `RESEND_API_KEY` và `RESEND_FROM` trong `.env`. Địa chỉ gửi phải thuộc tên miền đã xác minh trong Resend, ví dụ `FashionHub <news@ten-mien-cua-ban.vn>`. Đặt `MAIL_PUBLIC_URL` thành địa chỉ HTTPS công khai của FashionHub để liên kết hủy đăng ký hoạt động từ hộp thư. Có thể điều chỉnh `RESEND_REQUESTS_PER_SECOND` theo hạn mức của tài khoản Resend.
+
+Sau khi sửa `.env`, chạy `docker compose -p fashion-codex --env-file .env -f infrastructure/docker/compose.yaml up -d --no-deps --force-recreate auth-service` để container Auth nhận cấu hình mới. Nếu stack đang dùng tên project Compose khác, thay `fashion-codex` bằng tên project đó.
+
+Tại [trang quên mật khẩu](http://localhost:3000/forgot-password), khách hàng nhập mã 6 chữ số có hiệu lực 10 phút rồi đặt mật khẩu mới. Hệ thống cho thử tối đa 5 lần trên mỗi mã và cấp lại mã sau ít nhất 1 phút.
+
+Tại [Chiến dịch email](http://localhost:3000/admin/email), quản trị viên có thể chọn từng email hoặc cả nhóm khách đăng ký bản tin. Hàng đợi lưu tiến độ trong PostgreSQL và thử lại lỗi tạm thời. Chỉ số “Resend đã tiếp nhận” thể hiện kết quả tiếp nhận của API. Để xem sự kiện chuyển phát, mở nhật ký trong Resend.

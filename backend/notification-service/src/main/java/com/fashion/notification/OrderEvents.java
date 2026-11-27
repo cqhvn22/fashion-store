@@ -52,15 +52,21 @@ public class OrderEvents {
                         "INSERT INTO processed_events(event_id,event_type) VALUES (?,?) ON CONFLICT DO NOTHING",
                         eventId, type);
                 if (inserted == 1) {
+                    boolean remind = "fashion.order.created.v1".equals(type)
+                            && "PAYOS".equals(data.path("paymentMethod").asText()) && data.hasNonNull("paymentExpiresAt");
+                    var deadline = remind ? java.sql.Timestamp.from(java.time.Instant.parse(data.get("paymentExpiresAt").asText())) : null;
                     String body = switch (type) {
-                        case "fashion.order.created.v1" -> "Đơn " + data.path("orderCode").asText() + " đã được đặt thành công.";
+                        case "fashion.order.created.v1" -> "Đơn " + data.path("orderCode").asText()
+                                + (remind ? " đang chờ thanh toán. Mở mã QR để chuyển khoản trước khi hết hạn."
+                                          : " đã được đặt thành công.");
                         case "fashion.order.cancelled.v1" -> "Đơn hàng của bạn đã bị hủy.";
                         case "fashion.payment.paid.v1" -> "Thanh toán đơn hàng đã được xác nhận.";
                         default -> "Đơn hàng của bạn đã chuyển sang trạng thái " + statusName(data.path("status").asText()) + ".";
                     };
                     Sql.update(connection,
-                            "INSERT INTO notifications(id,event_id,recipient_user_id,order_id,channel,destination,subject,body,status,sent_at) VALUES (?,?,?,?,'IN_APP',?,? ,?,'SENT',now())",
-                            UUID.randomUUID(), eventId, userId, orderId, userId.toString(), "Đơn hàng", body);
+                            "INSERT INTO notifications(id,event_id,recipient_user_id,order_id,channel,destination,subject,body,status,sent_at,payment_reminder_until) VALUES (?,?,?,?,'IN_APP',?,?,?,'SENT',now(),?)",
+                            UUID.randomUUID(), eventId, userId, orderId, userId.toString(),
+                            remind ? "Chờ thanh toán PayOS" : "Đơn hàng", body, deadline);
                     for (UUID adminId : adminIds) {
                         Sql.update(connection,
                                 "INSERT INTO notifications(id,event_id,recipient_user_id,order_id,channel,destination,subject,body,status,sent_at) VALUES (?,?,?,?,'IN_APP',?,?,?,'SENT',now()) ON CONFLICT DO NOTHING",

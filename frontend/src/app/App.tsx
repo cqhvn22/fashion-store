@@ -2,7 +2,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { MainLayout, AdminLayout } from '../components/layout';
 import { HomePage, CatalogPage, ProductDetailPage } from '../features/catalog/CatalogPages';
 import { LoginPage, RegisterPage, ForgotPasswordPage } from '../features/auth/AuthPages';
-import { CartPage, CheckoutPage, SuccessPage } from '../features/checkout/CheckoutPages';
+import { CartPage, CheckoutPage, PaymentReturnPage, SuccessPage } from '../features/checkout/CheckoutPages';
 import {
   AddressesPage,
   OrderDetailPage,
@@ -28,6 +28,8 @@ import { AdminPromotions } from '../features/admin/AdminPromotions';
 import { AdminLoyalty } from '../features/admin/AdminLoyalty';
 import { AdminReviews } from '../features/admin/AdminReviews';
 import { AdminHomeCategories } from '../features/admin/AdminHomeCategories';
+import { AdminEmailCampaigns } from '../features/admin/AdminEmailCampaigns';
+import { NewsletterUnsubscribe } from '../features/account/NewsletterUnsubscribe';
 import { ChatPage } from '../features/chat/ChatWidget';
 import { ContentPage, StatusPage } from '../features/content/ContentPages';
 import { useAuthStore } from '../stores/authStore';
@@ -53,7 +55,7 @@ function ProtectedRoute({
     refetchOnMount: 'always',
   });
   if (!user || (useDbAuth && !hasAccessToken()))
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+    return <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />;
   if (admin && user.role !== 'ADMIN') return <Navigate to="/403" replace />;
   if (admin && useDbAuth) {
     if (roleCheck.isPending || roleCheck.isFetching)
@@ -99,9 +101,12 @@ export function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="/payment/success" element={<ProtectedRoute><PaymentReturnPage /></ProtectedRoute>} />
+        <Route path="/payment/cancel" element={<ProtectedRoute><PaymentReturnPage cancelled /></ProtectedRoute>} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/newsletter/unsubscribe" element={<NewsletterUnsubscribe />} />
         <Route
           path="/account/profile"
           element={
@@ -164,6 +169,7 @@ export function App() {
         <Route path="products/:id/edit" element={<AdminProductForm />} />
         <Route path="categories" element={<AdminCategories />} />
         <Route path="home-categories" element={<AdminHomeCategories />} />
+        <Route path="email" element={<AdminEmailCampaigns />} />
         <Route path="banners" element={<AdminBanners />} />
         <Route path="inventory" element={<AdminInventory />} />
         <Route path="orders" element={<AdminOrders />} />

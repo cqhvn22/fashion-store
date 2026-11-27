@@ -50,6 +50,9 @@ services:
       NOTIFICATION_SERVICE_URL: http://notification-service:8084
     ports: ["8080:8080"]
     depends_on: [auth-service, catalog-service, order-service, notification-service, ai-service]
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    ports: ["127.0.0.1:8025:8025"]
   auth-service:
     build: {context: ../../backend, dockerfile: auth-service/Dockerfile}
     environment:
@@ -58,6 +61,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
       JWT_VERIFY_JWK: ${JWT_VERIFY_JWK:?Set JWT_VERIFY_JWK}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
+      RESEND_REQUESTS_PER_SECOND: ${RESEND_REQUESTS_PER_SECOND:-2}
+      MAIL_PUBLIC_URL: ${MAIL_PUBLIC_URL:-http://localhost:3000}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Set INTERNAL_API_KEY}
@@ -96,8 +103,9 @@ services:
       PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:-disabled}
       PAYOS_API_KEY: ${PAYOS_API_KEY:-disabled}
       PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:-disabled}
-      PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:-http://localhost:5173/payment/success}
-      PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:-http://localhost:5173/payment/cancel}
+      PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:-http://localhost:3000/payment/success}
+      PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:-http://localhost:3000/payment/cancel}
+      PAYOS_API_URL: ${PAYOS_API_URL:-https://api-merchant.payos.vn}
     depends_on:
       postgres: {condition: service_healthy}
       catalog-service: {condition: service_started}

@@ -78,7 +78,7 @@ Các endpoint ở trên là **đề xuất**, cần thống nhất với fronten
 8. **Chatbot:** AI nhận câu hỏi và conversationId, truy xuất đoạn tri thức, trả lời kèm nguồn và productIds gợi ý. Catalog là nguồn sự thật cho tên/giá/tồn sản phẩm; AI chỉ lưu ID gợi ý và tài liệu tri thức của mình.
 9. **Báo cáo:** Dashboard/doanh thu tính từ đơn đã DELIVERED trong Order; số lượng sản phẩm/tồn từ Catalog. Báo cáo phải tách doanh thu giao hàng và số tiền đã thu, tránh gộp đơn COD chưa thu với giao dịch PayOS đã PAID. Ở MVP có thể tổng hợp qua API nội bộ; sau này dùng read model riêng khi tải lớn.
 
-Quy tắc phí vận chuyển hiện có trong mock: đơn từ **500.000 VND** được miễn phí, dưới mức đó **30.000 VND**. Đây là cấu hình nghiệp vụ đề xuất để backend đồng nhất với giao diện, không phải phí cố định vĩnh viễn.
+Phí vận chuyển là **30.000đ** khi tạm tính tiền hàng dưới **499.000đ**. Từ **499.000đ** trở lên, đơn được miễn phí vận chuyển.
 
 ## 3. Quy ước CSDL và cách chạy SQL
 

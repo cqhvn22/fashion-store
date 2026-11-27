@@ -21,21 +21,27 @@ public class PaymentReconciler {
     @Inject PayosClient payos;
     @Inject CatalogClient catalog;
     @Inject OrderResource orders;
+    @Inject PaymentSettlement settlement;
 
     @Scheduled(every = "1m", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
-    void expireLinks() {
-        List<Map<String, Object>> expired = Sql.list(database,
-                "SELECT id,provider_order_code FROM payment_attempts WHERE status='PENDING' AND expires_at<now() ORDER BY expires_at LIMIT 50");
-        for (Map<String, Object> candidate : expired) {
+    void reconcilePendingLinks() {
+        List<Map<String, Object>> pending = Sql.list(database,
+                """
+                UPDATE payment_attempts SET checked_at=now() WHERE id IN (
+                    SELECT id FROM payment_attempts
+                    WHERE status='PENDING' AND (payment_link_id IS NOT NULL OR expires_at<now())
+                      AND (checked_at IS NULL OR checked_at<now()-interval '45 seconds')
+                    ORDER BY checked_at NULLS FIRST,expires_at LIMIT 50 FOR UPDATE SKIP LOCKED
+                ) RETURNING id,provider_order_code,amount,expires_at<now() AS expired
+                """);
+        for (Map<String, Object> candidate : pending) {
             try {
                 long code = ((Number) candidate.get("providerOrderCode")).longValue();
                 JsonNode state = payos.get(code);
                 String status = state.path("status").asText();
-                if ("PAID".equals(status)) {
-                    LOG.warnf("PayOS payment %s is paid but webhook not applied; manual reconciliation required", code);
-                    continue;
-                }
+                if (settlement.confirmProviderState(state, code, ((Number) candidate.get("amount")).longValue(), "PAYOS_RECONCILED")) continue;
                 if ("PENDING".equals(status)) {
+                    if (!Boolean.TRUE.equals(candidate.get("expired")) || state.path("amountPaid").asLong() > 0) continue;
                     status = payos.cancel(code).path("status").asText();
                 }
                 if (!List.of("CANCELLED", "EXPIRED").contains(status)) continue;

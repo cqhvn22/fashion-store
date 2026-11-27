@@ -3,11 +3,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, MapPin, Minus, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { EmptyState, PageHeading } from '../../components/common';
 import { ProvinceWardFields, isValidDivision } from '../../components/ProvinceWardFields';
-import { orderService, shippingFeeFor } from '../../services/orders';
+import { orderService, paymentMethodLabel, shippingFeeFor } from '../../services/orders';
 import { loyaltyService } from '../../services/loyalty';
 import { productService } from '../../services/catalog';
 import { useAuthStore } from '../../stores/authStore';
@@ -18,6 +18,7 @@ import { useQuery } from '@tanstack/react-query';
 import { readLocal } from '../../services/storage';
 import { readCheckoutDraft, saveCheckoutDraft } from '../../services/checkoutDraft';
 import { addressService, sameAddress } from '../../services/addresses';
+import { PayosPaymentModal } from '../../components/PayosPaymentModal';
 import { useDbAuth, useDbCatalog, useDbOrders } from '../../services/httpClient';
 import type { Address } from '../../types/models';
 const checkoutSchema = z.object({
@@ -128,7 +129,7 @@ export function CartPage() {
             <div className="flex justify-between text-sm mb-5">
               <span>Phí vận chuyển dự kiến</span>
               <span>
-                {subtotal >= 500000 ? 'Miễn phí' : formatCurrency(shippingFeeFor(subtotal))}
+                {shippingFeeFor(subtotal) === 0 ? 'Miễn phí' : formatCurrency(shippingFeeFor(subtotal))}
               </span>
             </div>
             <div className="flex justify-between border-t pt-5 font-bold text-lg">
@@ -171,6 +172,8 @@ export function CheckoutPage() {
   const [saveSuccess, setSaveSuccess] = useState('');
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [rememberAddress, setRememberAddress] = useState(true);
+  const [paymentMethod, setPaymentMethod] = useState<'COD' | 'PAYOS'>('COD');
+  const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null);
   const addressPrefilled = useRef(false);
   const checkoutKey = useRef(crypto.randomUUID());
   const { data: addresses = [], isLoading: addressesLoading, error: addressesError } = useQuery({
@@ -289,7 +292,12 @@ export function CheckoutPage() {
               }
             }
             if (rememberAddress && user) await saveCurrentAddress(address);
-            const order = await orderService.create({ userId: user.id, items: confirmedItems, address, note, idempotencyKey: checkoutKey.current });
+            const order = await orderService.create({ userId: user.id, items: confirmedItems, address, note,
+              paymentMethod, idempotencyKey: checkoutKey.current });
+            if (paymentMethod === 'PAYOS') {
+              setPaymentOrderId(order.id);
+              return;
+            }
             removeSelected();
             await client.invalidateQueries();
             navigate(`/checkout/success/${order.id}`);
@@ -451,13 +459,21 @@ export function CheckoutPage() {
             <div className="text-xs font-extrabold uppercase tracking-wider text-ink mb-1">
               Phương thức thanh toán
             </div>
-            <div className="text-sm font-bold text-ink flex items-center gap-2 mt-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-brand" />
-              Thanh toán khi nhận hàng (COD)
+            <div className="mt-3 grid gap-3">
+              <label className={`flex cursor-pointer gap-3 border p-4 ${paymentMethod === 'COD' ? 'border-brand bg-red-50' : 'border-slate-200 bg-white'}`}>
+                <input type="radio" name="paymentMethod" value="COD" checked={paymentMethod === 'COD'}
+                  onChange={() => setPaymentMethod('COD')} className="mt-1 accent-brand" />
+                <span><strong className="block text-sm">Thanh toán khi nhận hàng (COD)</strong>
+                  <span className="mt-1 block text-xs text-slate-600">Thanh toán cho nhân viên giao hàng khi nhận kiện.</span></span>
+              </label>
+              <label className={`flex gap-3 border p-4 ${paymentMethod === 'PAYOS' ? 'border-brand bg-red-50' : 'border-slate-200 bg-white'} ${!useDbOrders ? 'opacity-60' : 'cursor-pointer'}`}>
+                <input type="radio" name="paymentMethod" value="PAYOS" checked={paymentMethod === 'PAYOS'}
+                  disabled={!useDbOrders} onChange={() => setPaymentMethod('PAYOS')} className="mt-1 accent-brand" />
+                <span><strong className="block text-sm">Chuyển khoản ngân hàng qua PayOS</strong>
+                  <span className="mt-1 block text-xs text-slate-600">Mở trang thanh toán PayOS để quét mã QR hoặc chuyển khoản. Đơn chỉ được xác nhận sau khi hệ thống ghi nhận thanh toán.</span>
+                  {!useDbOrders && <span className="mt-1 block text-xs text-amber-700">Cần kết nối hệ thống đơn hàng để sử dụng.</span>}</span>
+              </label>
             </div>
-            <p className="text-xs text-[#767676] mt-1">
-              Thanh toán tiền mặt trực tiếp cho nhân viên giao hàng khi nhận và kiểm tra kiện hàng.
-            </p>
           </div>
           {user ? (
             <label className="flex items-center gap-2.5 text-xs font-bold text-ink cursor-pointer select-none mt-4 p-3.5 bg-[#fafafa] border border-[#eee]">
@@ -536,13 +552,15 @@ export function CheckoutPage() {
           {pricingError && <p className="field-error mt-4">Không cập nhật được giá sản phẩm. Vui lòng thử lại.</p>}
           {serverError && <p className="field-error mt-4">{serverError}</p>}
           <button disabled={isSubmitting || (useDbCatalog && (checkingPrices || !!pricingError))} className="btn-primary w-full mt-6">
-            {isSubmitting ? 'Đang xử lý...' : 'Xác nhận đặt hàng'}
+            {isSubmitting ? 'Đang xử lý...' : paymentMethod === 'PAYOS' ? 'Đặt hàng và hiện mã QR' : 'Xác nhận đặt hàng'}
           </button>
           <p className="text-xs text-slate-500 mt-3">
             Máy chủ xác nhận giá và tồn kho trước khi ghi nhận đơn.
           </p>
         </aside>
       </form>
+      {paymentOrderId && <PayosPaymentModal orderId={paymentOrderId}
+        onClose={() => { removeSelected(); navigate(`/account/orders/${paymentOrderId}`); }} />}
     </div>
   );
 }
@@ -570,7 +588,7 @@ export function SuccessPage() {
               Tổng tiền: <strong>{formatCurrency(order.totalAmount)}</strong>
             </p>
             <p>
-              Thanh toán: <strong>COD</strong>
+              Thanh toán: <strong>{paymentMethodLabel(order.paymentMethod)}</strong>
             </p>
           </div>
         )}
@@ -585,4 +603,40 @@ export function SuccessPage() {
       </div>
     </div>
   );
+}
+
+export function PaymentReturnPage({ cancelled = false }: { cancelled?: boolean }) {
+  const [params] = useSearchParams();
+  const orderId = params.get('orderId');
+  const { data: order, error, isPending, refetch } = useQuery({
+    queryKey: ['order', orderId],
+    queryFn: () => orderService.byId(orderId!),
+    enabled: !!orderId && useDbOrders,
+    refetchInterval: (query) => query.state.data?.paymentStatus === 'PENDING' ? 4000 : false,
+    refetchOnWindowFocus: 'always',
+  });
+  const paid = order?.paymentStatus === 'PAID';
+  return <div className="container-shell py-16">
+    <div className="mx-auto max-w-xl bg-white p-8 text-center md:p-12">
+      <CheckCircle2 size={52} className={`mx-auto mb-5 ${paid ? 'text-emerald-600' : 'text-slate-400'}`} />
+      <h1 className="text-2xl font-bold">
+        {paid ? 'Đã nhận thanh toán' : cancelled ? 'Bạn đã rời trang thanh toán' : 'Đang kiểm tra thanh toán'}
+      </h1>
+      {!orderId || !useDbOrders ? <p className="mt-3 text-slate-600">Không tìm thấy mã đơn hàng để kiểm tra. Bạn có thể xem trạng thái trong tài khoản.</p> :
+        error ? <p className="mt-3 text-red-700">Chưa tải được trạng thái đơn hàng. Vui lòng thử lại.</p> :
+        isPending ? <p className="mt-3 text-slate-600">Đang tải thông tin đơn hàng…</p> :
+        <div className="mt-5 space-y-2 text-sm text-slate-600">
+          <p>Đơn hàng <strong className="text-ink">{order?.orderCode}</strong> · {formatCurrency(order?.totalAmount ?? 0)}</p>
+          <p>{paid ? 'Cửa hàng đã xác nhận khoản thanh toán của bạn.' :
+            order?.status === 'CANCELLED' ? 'Đơn hàng đã bị hủy.' :
+            cancelled ? 'Đơn hàng chưa được thanh toán. Bạn có thể xem lại đơn hàng để tiếp tục hoặc hủy.' :
+            'Đơn hàng chưa được xác nhận thanh toán. Trang sẽ tự kiểm tra lại trạng thái.'}</p>
+        </div>}
+      <div className="mt-7 flex flex-wrap justify-center gap-3">
+        {orderId && <Link className="btn-primary" to={`/account/orders/${orderId}`}>Xem đơn hàng</Link>}
+        {orderId && <button type="button" className="btn-outline" onClick={() => void refetch()}>Kiểm tra lại</button>}
+        <Link className="btn-outline" to="/products">Tiếp tục mua sắm</Link>
+      </div>
+    </div>
+  </div>;
 }

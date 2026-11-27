@@ -25,7 +25,7 @@ import { bannerService } from '../../services/banners';
 import { homeCategoryService } from '../../services/homeCategories';
 import { useCartStore } from '../../stores/cartStore';
 import { useWishlistStore } from '../../stores/wishlistStore';
-import type { Category, HomeBanner, HomeCategoryShowcase, Product, ProductQuery } from '../../types/models';
+import type { Category, HomeBanner, HomeCategoryShowcase, ProductQuery } from '../../types/models';
 import { formatCurrency } from '../../utils/format';
 import { getPaginationItems } from '../../utils/pagination';
 import { getThumbnailUrl, showProductPlaceholder } from '../../utils/images';
@@ -41,6 +41,21 @@ import { PUBLIC_METADATA_GC_MS, PUBLIC_METADATA_STALE_MS, PRODUCT_STALE_MS } fro
 import { FlyToCart, type CartFlight } from '../../components/FlyToCart';
 import { ImageLightboxModal } from '../../components/ImageLightboxModal';
 import { ProductReviews } from '../../components/ProductReviews';
+
+function useCategoryTrail(categories?: Category[], categoryId?: string) {
+  return useMemo(() => {
+    const byId = new Map(categories?.map(category => [category.id, category]));
+    const trail: Category[] = [];
+    const seen = new Set<string>();
+    let category = categoryId ? byId.get(categoryId) : undefined;
+    while (category && !seen.has(category.id)) {
+      seen.add(category.id);
+      trail.push(category);
+      category = category.parentId ? byId.get(category.parentId) : undefined;
+    }
+    return trail.reverse();
+  }, [categories, categoryId]);
+}
 
 function useCatalog(query: ProductQuery, enabled = true) {
   return useQuery({
@@ -399,6 +414,16 @@ export function HomeHeroBanner({ banners }: { banners: HomeBanner[] }) {
   );
 }
 
+const homeSeed = Math.floor(Math.random() * 2 ** 32);
+
+function useHomeSelection(section: 'new' | 'popular' | 'sale' | 'category', showcase?: HomeCategoryShowcase) {
+  return useQuery({
+    queryKey: ['home-selection', homeSeed, section, showcase],
+    queryFn: () => productService.homeSelection(section, homeSeed, showcase),
+    staleTime: PRODUCT_STALE_MS,
+  });
+}
+
 function HomeCategorySectionBlock({
   showcase,
   categories,
@@ -409,46 +434,7 @@ function HomeCategorySectionBlock({
   const showcaseCategory = categories.find((c) => c.id === showcase.categoryId);
   const targetSlug = showcaseCategory?.slug || showcase.category?.slug || '';
 
-  const { data: products = [], isLoading } = useQuery({
-    queryKey: [
-      'home-category-products',
-      showcase.id,
-      showcase.selectionMode,
-      targetSlug,
-      showcase.displayLimit,
-      showcase.productIds,
-    ],
-    queryFn: async () => {
-      // 1. Nếu backend đã trả sẵn danh sách sản phẩm
-      if (showcase.products && showcase.products.length > 0) {
-        return showcase.products;
-      }
-      // 2. Chế độ chọn sản phẩm cụ thể (CUSTOM)
-      if (
-        showcase.selectionMode === 'CUSTOM' &&
-        showcase.productIds &&
-        showcase.productIds.length > 0
-      ) {
-        const promises = showcase.productIds
-          .slice(0, showcase.displayLimit || 8)
-          .map((id) => productService.byId(id).catch(() => null));
-        const fetched = await Promise.all(promises);
-        const valid = fetched.filter((p): p is Product => p !== null);
-        if (valid.length > 0) return valid;
-      }
-      // 3. Chế độ 'ALL': gọi API danh mục công khai
-      if (targetSlug) {
-        const res = await productService.list({
-          category: targetSlug,
-          limit: showcase.displayLimit || 8,
-          sort: 'newest',
-        });
-        return res.content;
-      }
-      return [];
-    },
-    staleTime: 60_000,
-  });
+  const { data: products = [], isLoading } = useHomeSelection('category', showcase);
 
   if (!isLoading && products.length === 0) return null;
 
@@ -495,12 +481,9 @@ export function HomePage() {
     gcTime: PUBLIC_METADATA_GC_MS,
   });
 
-  const { data, isLoading, error } = useCatalog({ limit: 36 });
-  const featured = data?.content.slice(0, 8) ?? [];
-  const newItems = [...(data?.content ?? [])]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 8);
-  const sale = data?.content.filter((item) => item.originalPrice).slice(0, 8) ?? [];
+  const newest = useHomeSelection('new');
+  const popular = useHomeSelection('popular');
+  const { data: sale = [] } = useHomeSelection('sale');
   const rootCategories = categories.filter((item) => item.isActive && !item.parentId);
 
   return (
@@ -570,7 +553,7 @@ export function HomePage() {
                 }
               }
             }
-            const sampleProduct = data?.content.find((product) =>
+            const sampleProduct = newest.data?.find((product) =>
               descendantIds.has(product.categoryId),
             );
             const image = item.imageUrl || sampleProduct?.images[0]?.url;
@@ -611,12 +594,12 @@ export function HomePage() {
           subtitle="Bộ sưu tập vừa cập bến với các thiết kế và gam màu mới nhất"
           href="/products?sort=newest"
         />
-        {isLoading ? (
+        {newest.isLoading ? (
           <ProductSkeleton count={8} />
-        ) : error ? (
-          <ErrorState error={error} />
+        ) : newest.error ? (
+          <ErrorState error={newest.error} />
         ) : (
-          <ProductGrid products={newItems} />
+          <ProductGrid products={newest.data ?? []} />
         )}
 
         {/* Dynamic Admin-Curated Home Category Showcases */}
@@ -656,12 +639,12 @@ export function HomePage() {
           subtitle="Các sản phẩm được khách hàng tin dùng và đánh giá cao nhất"
           href="/products?sort=bestselling"
         />
-        {isLoading ? (
+        {popular.isLoading ? (
           <ProductSkeleton count={8} />
-        ) : error ? (
-          <ErrorState error={error} />
+        ) : popular.error ? (
+          <ErrorState error={popular.error} />
         ) : (
-          <ProductGrid products={featured} />
+          <ProductGrid products={popular.data ?? []} />
         )}
 
         {/* Sale Collection */}
@@ -736,6 +719,7 @@ export function CatalogPage({ mode = 'products' }: { mode?: 'products' | 'search
 
   const { data, isLoading, error, refetch } = useCatalog(query);
   const category = categories.find((item) => item.slug === activeCategory);
+  const categoryTrail = useCategoryTrail(categories, category?.id);
 
   // Subcategories to display in horizontal quick pills
   const { currentParentCategory, pillCategories } = useMemo(() => {
@@ -981,14 +965,20 @@ export function CatalogPage({ mode = 'products' }: { mode?: 'products' | 'search
     <div className="container-shell py-8">
       {/* Breadcrumbs */}
       <nav aria-label="Breadcrumb" className="text-xs text-[#767676] mb-4">
-        <ol className="flex items-center gap-1.5">
+        <ol className="flex flex-wrap items-center gap-1.5">
           <li>
             <Link to="/" className="hover:text-ink">
               Trang chủ
             </Link>
           </li>
-          <li>/</li>
-          <li className="text-ink font-semibold">{title}</li>
+          {(mode === 'search' ? categoryTrail : categoryTrail.slice(0, -1)).map(ancestor => (
+            <li key={ancestor.id} className="flex items-center gap-1.5">
+              <span aria-hidden="true">/</span>
+              <Link to={`/categories/${ancestor.slug}`} className="hover:text-ink">{ancestor.name}</Link>
+            </li>
+          ))}
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" className="text-ink font-semibold">{title}</li>
         </ol>
       </nav>
 
@@ -1263,6 +1253,12 @@ export function CatalogPage({ mode = 'products' }: { mode?: 'products' | 'search
 export function ProductDetailPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const { data: categories } = useQuery({
+    queryKey: ['categories'],
+    queryFn: categoryService.list,
+    staleTime: PUBLIC_METADATA_STALE_MS,
+    gcTime: PUBLIC_METADATA_GC_MS,
+  });
   const {
     data: product,
     isLoading,
@@ -1273,6 +1269,8 @@ export function ProductDetailPage() {
     enabled: !!slug,
     staleTime: PRODUCT_STALE_MS,
   });
+
+  const categoryTrail = useCategoryTrail(categories, product?.categoryId);
 
   const [variantId, setVariantId] = useState('');
   const [quantity, setQuantity] = useState(1);
@@ -1414,14 +1412,16 @@ export function ProductDetailPage() {
               Trang chủ
             </Link>
           </li>
-          <li>/</li>
-          <li>
-            <Link to="/products" className="hover:text-ink">
-              Sản phẩm
-            </Link>
+          {categoryTrail.map(category => (
+            <li key={category.id} className="flex items-center gap-1.5">
+              <span aria-hidden="true">/</span>
+              <Link to={`/categories/${category.slug}`} className="hover:text-ink">{category.name}</Link>
+            </li>
+          ))}
+          <li className="flex items-center gap-1.5">
+            <span aria-hidden="true">/</span>
+            <span aria-current="page" className="text-ink font-semibold">{product.name}</span>
           </li>
-          <li>/</li>
-          <li className="text-ink font-semibold">{product.name}</li>
         </ol>
       </nav>
 
@@ -1743,7 +1743,7 @@ export function ProductDetailPage() {
       {/* Related Products Recommendation */}
       <div className="mt-16 border-t border-[#e5e5e5] pt-10">
         <SectionHeading title="CÓ THỂ BẠN CŨNG THÍCH" href="/products" />
-        <RelatedProducts categoryId={product.categoryId} exclude={product.id} />
+        <RelatedProducts category={categoryTrail[categoryTrail.length - 1]} exclude={product.id} />
       </div>
 
       {flight && <FlyToCart key={flight.id} flight={flight} onDone={() => setFlight(null)} />}
@@ -1761,15 +1761,7 @@ export function ProductDetailPage() {
   );
 }
 
-function RelatedProducts({ categoryId, exclude }: { categoryId: string; exclude: string }) {
-  const { data: categories = seedCategories } = useQuery({
-    queryKey: ['categories'],
-    queryFn: categoryService.list,
-    placeholderData: seedCategories,
-    staleTime: PUBLIC_METADATA_STALE_MS,
-    gcTime: PUBLIC_METADATA_GC_MS,
-  });
-  const category = categories.find((item) => item.id === categoryId);
+function RelatedProducts({ category, exclude }: { category?: Category; exclude: string }) {
   const { data } = useCatalog({ category: category?.slug, limit: 6 }, !!category);
   return (
     <ProductGrid

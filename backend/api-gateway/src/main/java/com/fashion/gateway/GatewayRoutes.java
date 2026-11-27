@@ -99,7 +99,8 @@ public class GatewayRoutes {
 
     private String targetFor(String path) {
         if (matches(path, "/api/v1/auth") || matches(path, "/api/v1/users")
-                || matches(path, "/api/v1/admin/users")) {
+                || matches(path, "/api/v1/admin/users") || matches(path, "/api/v1/admin/email")
+                || matches(path, "/api/v1/newsletter")) {
             return authUrl;
         }
         if (matches(path, "/api/v1/reviews") || matches(path, "/api/v1/products") || matches(path, "/api/v1/categories")

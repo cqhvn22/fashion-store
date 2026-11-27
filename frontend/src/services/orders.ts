@@ -10,7 +10,18 @@ import { formatCurrency, formatOrderStatus } from '../utils/format';
 const key = 'fashionhub_orders';
 export const getMockOrders = () => readLocal<Order[]>(key, seedOrders);
 const save = (orders: Order[]) => writeLocal(key, orders);
-export const shippingFeeFor = (subtotal: number) => (subtotal >= 500000 ? 0 : 30000);
+export const paymentMethodLabel = (method: Order['paymentMethod']) =>
+  method === 'PAYOS' ? 'Chuyển khoản qua PayOS' : 'Thanh toán khi nhận hàng (COD)';
+export const shippingFeeFor = (subtotal: number) => (subtotal >= 499000 ? 0 : 30000);
+export interface PaymentDetails {
+  orderId: string;
+  paymentMethod: 'COD' | 'PAYOS';
+  paymentStatus: string;
+  statusCheckUnavailable?: boolean;
+  attempt: { status?: string; checkoutUrl?: string | null; qrCode?: string | null;
+    accountNumber?: string | null; accountName?: string | null;
+    transferDescription?: string | null; amount?: number; expiresAt?: string };
+}
 
 const devSyncUrl = '/api/dev-mock/fashionhub_orders';
 
@@ -74,6 +85,19 @@ export async function syncMockOrdersFromDevServer(): Promise<void> {
 }
 
 export const orderService = {
+  async payment(id: string): Promise<PaymentDetails> {
+    const { data } = await httpClient.get<{ data: PaymentDetails }>(`${endpoints.orders}/${id}/payment`);
+    return data.data;
+  },
+  async collectCod(id: string): Promise<Order> {
+    const { data } = await httpClient.patch<{data: Order}>(`${endpoints.admin.orders}/${id}/payment/collected`);
+    return data.data;
+  },
+  async cancel(id: string): Promise<Order> {
+    if (!useDbOrders) return this.updateStatus(id, 'CANCELLED');
+    const { data } = await httpClient.patch<{ data: Order }>(`${endpoints.orders}/${id}/cancel`);
+    return data.data;
+  },
   async list(userId?: string): Promise<Order[]> {
     if (!useDbOrders) {
       await syncMockOrdersFromDevServer();
@@ -105,18 +129,22 @@ export const orderService = {
     address: Address;
     note?: string;
     idempotencyKey?: string;
+    paymentMethod?: 'COD' | 'PAYOS';
   }): Promise<Order> {
     if (useDbOrders) {
       const { data } = await httpClient.post<{ data: Order }>(endpoints.orders, {
         items: input.items.map((item) => ({ variantId: item.variantId, quantity: item.quantity,
           expectedUnitPrice: item.unitPrice })),
         shippingAddress: input.address,
-        paymentMethod: 'COD',
+        paymentMethod: input.paymentMethod ?? 'COD',
         note: input.note,
       }, {
         headers: { 'Idempotency-Key': input.idempotencyKey ?? crypto.randomUUID() },
       });
       return data.data;
+    }
+    if (input.paymentMethod === 'PAYOS') {
+      throw new Error('Chuyển khoản cần kết nối hệ thống đơn hàng.');
     }
     const products = getMockProducts();
     for (const item of input.items) {

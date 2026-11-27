@@ -14,6 +14,7 @@ import {
   Layers,
   LayoutDashboard,
   LogOut,
+  Mail,
   Menu,
   Package,
   Search,
@@ -25,6 +26,7 @@ import {
   X,
 } from 'lucide-react';
 import { categoryService, productService } from '../services/catalog';
+import { httpClient } from '../services/httpClient';
 import { categories as seedCategories, seedProducts } from '../mocks/catalog';
 import { atinoCategories } from '../data/atinoCatalog';
 import { useAuthStore } from '../stores/authStore';
@@ -810,6 +812,8 @@ export function Header() {
 }
 
 export function Footer() {
+  const [subscription, setSubscription] = useState<{ error: boolean; text: string }>();
+  const [subscribing, setSubscribing] = useState(false);
   return (
     <footer className="bg-[#f8f8f8] text-ink border-t border-[#e5e5e5] mt-20">
       {/* Newsletter Strip */}
@@ -820,19 +824,36 @@ export function Footer() {
               ĐĂNG KÝ NHẬN BẢN TIN FASHIONHUB
             </h3>
             <p className="text-xs text-[#aaa] mt-1">
-              Nhận ngay mã giảm giá 100.000₫ cho đơn hàng đầu tiên và thông tin ưu đãi sớm nhất.
+              Nhận tin về sản phẩm mới và ưu đãi qua email. Bạn có thể hủy đăng ký bất cứ lúc nào.
             </p>
           </div>
-          <div className="flex w-full md:w-auto max-w-md">
-            <input
-              type="email"
-              placeholder="Nhập địa chỉ email của bạn..."
-              className="bg-white text-ink text-xs px-4 py-3 outline-none flex-1 min-w-0"
-            />
-            <button className="bg-brand text-white text-xs font-bold uppercase tracking-wider px-6 py-3 hover:bg-[#b8000e] transition-colors shrink-0">
-              ĐĂNG KÝ
-            </button>
-          </div>
+          <form className="w-full md:max-w-md" onSubmit={async event => {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const email = String(new FormData(form).get('newsletterEmail')).trim();
+            setSubscribing(true);
+            try {
+              await httpClient.post('/newsletter/subscribe', { email });
+              setSubscription({ error: false, text: 'Bạn đã đăng ký nhận bản tin FashionHub.' });
+              form.reset();
+            } catch (cause) {
+              setSubscription({ error: true, text: cause instanceof Error ? cause.message : 'Chưa thể đăng ký. Vui lòng thử lại.' });
+            } finally {
+              setSubscribing(false);
+            }
+          }}>
+            <div className="flex">
+              <input type="email" name="newsletterEmail" aria-label="Email nhận bản tin" required
+                autoComplete="email" maxLength={255} placeholder="Nhập địa chỉ email của bạn…"
+                className="bg-white text-ink text-xs px-4 py-3 flex-1 min-w-0" />
+              <button disabled={subscribing} className="bg-brand text-white text-xs font-bold px-6 py-3 shrink-0 disabled:opacity-60">
+                {subscribing ? 'ĐANG ĐĂNG KÝ…' : 'ĐĂNG KÝ'}
+              </button>
+            </div>
+            {subscription && <p role={subscription.error ? 'alert' : 'status'} className={`mt-2 text-xs ${subscription.error ? 'text-red-200' : 'text-emerald-200'}`}>
+              {subscription.text}
+            </p>}
+          </form>
         </div>
       </div>
 
@@ -1026,6 +1047,8 @@ const adminLinks = [
   { to: '/admin/orders', label: 'Đơn hàng', icon: ClipboardList },
   { to: '/admin/reviews', label: 'Đánh giá', icon: Star },
   { to: '/admin/knowledge', label: 'Nội dung trợ lý', icon: Bot },
+  { to: '/admin/email', label: 'Chiến dịch email', icon: Mail },
+  { to: '/admin/users', label: 'Người dùng', icon: UserRound },
   { to: '/admin/ai-conversations', label: 'Hội thoại', icon: Bot },
   { to: '/admin/reports', label: 'Thống kê', icon: BarChart3 },
 ];

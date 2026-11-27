@@ -18,6 +18,8 @@ export function NotificationBell() {
   const { data: notifications = [], error } = useQuery({
     queryKey: ['notifications', user?.id],
     queryFn: () => notificationService.list(),
+    refetchInterval: open ? 10000 : false,
+    staleTime: 0,
     enabled,
     refetchOnWindowFocus: true,
   });
@@ -25,6 +27,7 @@ export function NotificationBell() {
   const { data: unread = 0 } = useQuery({
     queryKey: ['notification-count', user?.id],
     queryFn: () => notificationService.unreadCount(),
+    refetchInterval: 10000,
     enabled,
     refetchOnWindowFocus: true,
   });
@@ -131,7 +134,7 @@ export function NotificationBell() {
               key={item.id}
               to={
                 item.orderId
-                  ? user?.role === 'ADMIN'
+                    ? item.paymentReminderUntil ? `/account/orders/${item.orderId}?payment=qr` : user?.role === 'ADMIN'
                     ? `/admin/orders/${item.orderId}`
                     : `/account/orders/${item.orderId}`
                   : '#'

@@ -25,7 +25,7 @@ public class NotificationResource {
     @GET
     public Map<String, Object> list() {
         return Api.ok(Sql.list(database,
-                "SELECT id,order_id,subject,body,read_at,created_at FROM notifications "
+                "SELECT id,order_id,subject,body,read_at,created_at,payment_reminder_until FROM visible_in_app_notifications "
                 + "WHERE recipient_user_id=? AND channel='IN_APP' ORDER BY created_at DESC LIMIT 50",
                 userId()));
     }
@@ -33,7 +33,7 @@ public class NotificationResource {
     @GET @Path("/unread-count")
     public Map<String, Object> unreadCount() {
         return Api.ok(Sql.one(database,
-                "SELECT COUNT(DISTINCT COALESCE(order_id::text, id::text)) AS count FROM notifications WHERE recipient_user_id=? AND channel='IN_APP' AND read_at IS NULL",
+                "SELECT COUNT(DISTINCT COALESCE(order_id::text, id::text)) AS count FROM visible_in_app_notifications WHERE recipient_user_id=? AND read_at IS NULL",
                 userId()));
     }
 

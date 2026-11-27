@@ -662,3 +662,15 @@ def admin_conversations(_: dict = Depends(admin_user)):
             'updated_at AS "updatedAt" FROM conversations ORDER BY updated_at DESC LIMIT 500'
         ).fetchall()
     return ok(rows)
+
+
+@app.get("/api/v1/admin/ai-conversations/{conversation_id}")
+def admin_conversation(conversation_id: UUID, _: dict = Depends(admin_user)):
+    with connection() as db:
+        if not db.execute("SELECT 1 FROM conversations WHERE id=%s", (conversation_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        messages = db.execute(
+            'SELECT id,role,content,created_at AS "createdAt" FROM chat_messages '
+            "WHERE conversation_id=%s ORDER BY created_at,id", (conversation_id,)
+        ).fetchall()
+    return ok({"id": conversation_id, "messages": messages})

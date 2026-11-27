@@ -1,5 +1,5 @@
 import { categories, seedProducts } from '../mocks/catalog';
-import type { Category, PageResponse, Product, ProductQuery } from '../types/models';
+import type { Category, HomeCategoryShowcase, PageResponse, Product, ProductQuery } from '../types/models';
 import { endpoints } from './endpoints';
 import { httpClient, useDbCatalog } from './httpClient';
 import { applyPromotionsToProductList, getMockPromotions } from './promotions';
@@ -87,6 +87,37 @@ export const categoryService = {
   },
 };
 export const productService = {
+  async homeSelection(section: 'new' | 'popular' | 'sale' | 'category', seed: number, showcase?: HomeCategoryShowcase): Promise<Product[]> {
+    if (useDbCatalog) {
+      const { data } = await httpClient.get<{ data: Product[] }>(`${endpoints.products}/home-selection`, {
+        params: { section, seed, showcaseId: showcase?.id },
+      });
+      return data.data;
+    }
+    const slug = getMockCategories().find(category => category.id === showcase?.categoryId)?.slug;
+    let { content } = await productService.list({
+      category: showcase?.selectionMode === 'ALL' ? slug : undefined,
+      limit: Number.MAX_SAFE_INTEGER,
+    });
+    if (showcase?.selectionMode === 'ALL' && !slug) return [];
+    if (showcase?.selectionMode === 'CUSTOM') content = content.filter(p => showcase.productIds?.includes(p.id));
+    if (section === 'sale') content = content.filter(p => p.variants.some(v => v.compareAtPrice && v.compareAtPrice > v.price));
+    let state = seed;
+    for (let i = content.length - 1; i > 0; i--) {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      const j = Math.floor((state / 2 ** 32) * (i + 1));
+      [content[i], content[j]] = [content[j], content[i]];
+    }
+    const bySales = (a: Product, b: Product) => b.soldCount - a.soldCount;
+    if (section === 'new' || section === 'popular') {
+      const sorted = [...content].sort(section === 'new' ? (a, b) => b.createdAt.localeCompare(a.createdAt) : bySales);
+      const pool = new Set(sorted.slice(0, 32));
+      content = content.filter(p => pool.has(p));
+    }
+    const limit = showcase?.displayLimit || 8;
+    const top = [...content].sort(bySales).filter(p => p.soldCount > 0).slice(0, Math.max(1, Math.floor(limit / 4)));
+    return [...top, ...content.filter(p => !top.includes(p))].slice(0, limit).sort(bySales);
+  },
   async listAdmin(): Promise<Product[]> {
     if (!useDbCatalog) return getMockProducts();
     const items: Product[] = [];

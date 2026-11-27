@@ -6,6 +6,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { Badge, EmptyState, ErrorState, PageHeading } from '../../components/common';
 import { OrderTimeline } from '../../components/OrderTimeline';
 import { OrderInvoiceModal } from '../../components/OrderInvoice';
+import { PaymentStatusBadge } from '../../components/PaymentStatusBadge';
 import { demoUsers } from '../../mocks/catalog';
 import {
   categoryService,
@@ -15,7 +16,7 @@ import {
 } from '../../services/catalog';
 import { mockConversations } from '../../services/chat';
 import { orderService } from '../../services/orders';
-import { httpClient, mockMode, useDbCatalog } from '../../services/httpClient';
+import { httpClient, useDbAi, useDbAuth, useDbOrders, useDbCatalog } from '../../services/httpClient';
 import { uploadImage } from '../../services/media';
 import { bannerService } from '../../services/banners';
 import type { Category, HomeBanner, Order, OrderStatus, Product, ProductImage } from '../../types/models';
@@ -109,6 +110,7 @@ export function AdminDashboard() {
             >
               <span>{item.orderCode}</span>
               <span>{formatOrderStatus(item.status)}</span>
+              <PaymentStatusBadge order={item} />
               <strong>{formatCurrency(item.totalAmount)}</strong>
             </Link>
           ))}
@@ -1071,6 +1073,7 @@ export function AdminOrders() {
                   <th>Mã đơn</th>
                   <th>Ngày tạo</th>
                   <th>Trạng thái</th>
+                  <th>Thanh toán</th>
                   <th>Tổng tiền</th>
                   <th>Thao tác</th>
                 </tr>
@@ -1093,6 +1096,7 @@ export function AdminOrders() {
                         {formatOrderStatus(item.status)}
                       </Badge>
                     </td>
+                    <td><PaymentStatusBadge order={item} />{item.paymentMethod !== 'PAYOS' && <span className="text-xs text-slate-500">COD</span>}</td>
                     <td>{formatCurrency(item.totalAmount)}</td>
                     <td>
                       <div className="flex items-center gap-2">
@@ -1147,6 +1151,10 @@ export function AdminOrderDetail({ orderIdOverride, onClose }: { orderIdOverride
   });
   const mutation = useMutation({
     mutationFn: (status: OrderStatus) => orderService.updateStatus(orderId!, status),
+    onSuccess: () => void client.invalidateQueries(),
+  });
+  const collect = useMutation({
+    mutationFn: () => orderService.collectCod(orderId!),
     onSuccess: () => void client.invalidateQueries(),
   });
   const transitions: Record<OrderStatus, OrderStatus[]> = {
@@ -1265,8 +1273,12 @@ export function AdminOrderDetail({ orderIdOverride, onClose }: { orderIdOverride
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between text-sm">
             <span className="text-slate-500">Phương thức thanh toán:</span>
-            <span className="font-semibold">{order.paymentMethod === 'COD' ? 'Thanh toán khi nhận hàng (COD)' : order.paymentMethod}</span>
+            <span className="font-semibold">{order.paymentMethod === 'PAYOS' ? 'Chuyển khoản qua PayOS' : 'Thanh toán khi nhận hàng (COD)'}</span>
           </div>
+          {order.paymentMethod === 'PAYOS' && <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+            <span className="text-slate-500">Trạng thái thanh toán:</span>
+            <PaymentStatusBadge order={order} />
+          </div>}
           <h3 className="font-bold mt-7 mb-2">Địa chỉ nhận hàng</h3>
           <p className="text-sm">
             {order.shippingAddress.recipientName} · {order.shippingAddress.phone}
@@ -1294,8 +1306,18 @@ export function AdminOrderDetail({ orderIdOverride, onClose }: { orderIdOverride
           >
             {formatOrderStatus(order.status)}
           </Badge>
+          {order.paymentMethod === 'PAYOS' && <div className="mt-4">
+            <h3 className="mb-2 text-sm font-bold">Thanh toán trực tuyến</h3>
+            <PaymentStatusBadge order={order} />
+          </div>}
           <div className="flex flex-wrap gap-2 mt-5">
-            {transitions[order.status].map((status) => (
+            {useDbOrders && order.paymentMethod === 'COD' && order.status === 'DELIVERED' && order.paymentStatus !== 'PAID' &&
+              <button className="btn-primary" disabled={collect.isPending} onClick={() => {
+                if (window.confirm('Xác nhận cửa hàng đã nhận đủ tiền COD cho đơn này?')) collect.mutate();
+              }}>Xác nhận đã thu COD</button>}
+            {collect.error && <p role="alert">{collect.error.message}</p>}
+            {order.paymentMethod === 'COD' && <PaymentStatusBadge order={order} />}
+            {transitions[order.status].filter(next => order.paymentMethod !== 'PAYOS' || order.paymentStatus === 'PAID' || next === 'CANCELLED').map((status) => (
               <button
                 key={status}
                 disabled={mutation.isPending}
@@ -1379,6 +1401,10 @@ export function AdminReports() {
   );
 }
 export function AdminUsers() {
+  const users = useQuery({
+    queryKey: ['admin-users'], enabled: useDbAuth,
+    queryFn: async () => (await httpClient.get<{data: typeof demoUsers}>('/admin/users')).data.data,
+  });
   return (
     <>
       <PageHeading
@@ -1386,8 +1412,8 @@ export function AdminUsers() {
         eyebrow="ADMIN"
         description="Xem các tài khoản trong cửa hàng."
       />
-      {!mockMode ? (
-        <EmptyState title="Danh sách tài khoản chưa sẵn sàng" />
+      {users.error ? (<ErrorState error={users.error} />) : useDbAuth && users.isPending ? (
+        <p>Đang tải tài khoản…</p>
       ) : (
         <div className="panel">
           <table className="data-table">
@@ -1400,7 +1426,7 @@ export function AdminUsers() {
               </tr>
             </thead>
             <tbody>
-              {demoUsers.map((user) => (
+              {(useDbAuth ? users.data ?? [] : demoUsers).map((user) => (
                 <tr key={user.id}>
                   <td>{user.fullName}</td>
                   <td>{user.email}</td>
@@ -1416,22 +1442,24 @@ export function AdminUsers() {
   );
 }
 export function AdminConversations() {
-  const messages = mockMode ? mockConversations.list() : [];
-  const ids = [...new Set(messages.map((item) => item.conversationId))];
-  const [selected, setSelected] = useState(ids[0] ?? '');
+  const local = useDbAi ? [] : mockConversations.list();
+  const list = useQuery({ queryKey: ['admin-ai-conversations'], enabled: useDbAi,
+    queryFn: async () => (await httpClient.get<{data: {id: string; updatedAt: string}[]}>('/admin/ai-conversations')).data.data });
+  const ids = useDbAi ? (list.data ?? []).map(row => row.id) : [...new Set(local.map(row => row.conversationId))];
+  const [selection, setSelected] = useState('');
+  const selected = ids.includes(selection) ? selection : ids[0] ?? '';
+  const detail = useQuery({ queryKey: ['admin-ai-conversation', selected], enabled: useDbAi && !!selected,
+    queryFn: async () => (await httpClient.get<{data: {messages: typeof local}}>(`/admin/ai-conversations/${selected}`)).data.data.messages });
+  const messages = useDbAi ? detail.data ?? [] : local;
   return (
     <>
       <PageHeading
         title="Hội thoại AI"
         eyebrow="TRỢ LÝ MUA SẮM"
-        description={
-          mockMode
-            ? 'Lịch sử hội thoại phát sinh trong trình duyệt này.'
-            : 'Hội thoại hiện chưa sẵn sàng.'
-        }
+        description="Chọn hội thoại để xem câu hỏi và câu trả lời."
       />
-      {!mockMode ? (
-        <EmptyState title="Hội thoại hiện chưa sẵn sàng" />
+      {list.error ? (<ErrorState error={list.error} />) : useDbAi && list.isPending ? (
+        <p>Đang tải hội thoại…</p>
       ) : !ids.length ? (
         <EmptyState
           title="Chưa có hội thoại"
@@ -1446,14 +1474,15 @@ export function AdminConversations() {
                 onClick={() => setSelected(id)}
                 className={`block w-full text-left border rounded p-3 text-sm ${selected === id ? 'border-brand bg-orange-50' : ''}`}
               >
-                {messages.find((item) => item.conversationId === id && item.role === 'USER')
-                  ?.content ?? id}
+                {useDbAi ? formatDate(list.data!.find(row => row.id === id)!.updatedAt) : (messages.find(row => row.conversationId === id && row.role === 'USER')?.content ?? id)}
               </button>
             ))}
           </div>
           <div className="panel space-y-3">
+            {detail.error && <ErrorState error={detail.error} />}
+            {useDbAi && detail.isPending && <p>Đang tải tin nhắn…</p>}
             {messages
-              .filter((item) => item.conversationId === selected)
+              .filter((item) => useDbAi || item.conversationId === selected)
               .map((item) => (
                 <div key={item.id} className="border-b pb-3 text-sm">
                   <strong>{item.role === 'USER' ? 'Khách hỏi' : 'Trợ lý'}</strong>
